@@ -1,0 +1,45 @@
+  # Email MCP server for {{name}}. Published image (amd64+arm64), starts in
+  # ~1 s. The account list is a TOML template with ${VAR} placeholders; node
+  # (present in the image) substitutes them from the container env at start,
+  # so no package install and no envsubst is needed. The image runs as user
+  # `node` (uid 1000) with HOME=/home/node.
+  {{service.name}}:
+    image: {{service.image}}
+    container_name: {{service.name}}
+    restart: unless-stopped
+    labels:
+      scotty.member: "{{user}}"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - ./config/mcp-email-{{user}}/config.toml.template:/config.toml.template:ro
+      # Shared startup guard (see the file's header): an IMAP socket reset by
+      # the provider raises an unhandled 'error' event in imapflow and kills the
+      # server; the guard turns that back into the lazy reconnect the connection
+      # manager already implements.
+      - ./config/mcp-email/guard.mjs:/guard.mjs:ro
+    environment:
+{{#each connector.service_env as var}}
+      - {{var}}=${{{var}}}
+{{/each}}
+    entrypoint: ["sh", "-c"]
+    # `$$` is compose's escape for a literal `$`.
+    command:
+      - |
+        mkdir -p "$$HOME/.config/email-mcp" &&
+        node -e 'const fs=require("fs");const t=fs.readFileSync("/config.toml.template","utf8");fs.writeFileSync(process.env.HOME+"/.config/email-mcp/config.toml",t.replace(/\$$\{(\w+)\}/g,(m,k)=>process.env[k]??m))' &&
+        echo "Config generated. Starting server..." &&
+        exec node --import /guard.mjs /app/dist/main.js http 8080
+    # Health = the HTTP server answers. `node -e fetch` because the image has no
+    # curl/wget. The gateway's depends_on waits for this on `compose up`; on a
+    # reboot it does not (restart policy), which the gateway's own retry covers.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+

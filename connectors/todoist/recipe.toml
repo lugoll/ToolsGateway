@@ -1,0 +1,16 @@
+# Todoist tasks through the official MCP server, launched by the member's
+# gateway as a stdio process. Recipe format: connectors/README.md.
+name   = "todoist"                 # 1MCP server key becomes "todoist-<user>"
+domain = "todoist"                 # gateway tag and Hermes tool group
+doc    = "{{his}} Todoist tasks and projects"
+
+[[env]]
+stem = "TODOIST_API_KEY"
+doc  = "Todoist Settings → Integrations → Developer → API token"
+
+[gateway]
+type    = "stdio"
+command = "npx"
+args    = ["-y", "@doist/todoist-mcp"]
+[gateway.env]
+TODOIST_API_KEY = "${TODOIST_API_KEY_{{USER}}}"

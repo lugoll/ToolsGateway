@@ -1,0 +1,1 @@
+- **Mail** (`email`): `search_emails`, `list_emails`, `get_email`, `get_thread`, `triage_inbox`, `summarize_thread`. Accounts are named {{connector.account_names_quoted}}. Email is **read/draft only** on purpose: sending, replying, forwarding and scheduling are disabled at the gateway. To answer a mail, `save_draft` and tell {{name}} it is in {{his}} Drafts folder.

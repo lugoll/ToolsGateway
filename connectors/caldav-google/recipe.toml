@@ -1,0 +1,28 @@
+# Google calendar over CalDAV (caldav-mcp), stdio inside the member's gateway.
+# Uses the Gmail address and an app password (Google is phasing those out;
+# roadmap step 5 replaces this with an OAuth server). Recipe format:
+# connectors/README.md.
+name   = "calendar-gmail"          # server key "calendar-gmail-<user>"
+domain = "calendar"
+doc    = "{{his}} Google calendar"
+
+[[env]]
+stem = "GMAIL_EMAIL"
+doc  = "Gmail address"
+[[env]]
+stem = "GMAIL_APP_PASSWORD"
+doc  = "Google app password (myaccount.google.com → Security → App passwords)"
+
+[gateway]
+type    = "stdio"
+command = "npx"
+args    = ["-y", "caldav-mcp"]
+[gateway.env]
+CALDAV_USERNAME = "${GMAIL_EMAIL_{{USER}}}"
+CALDAV_PASSWORD = "${GMAIL_APP_PASSWORD_{{USER}}}"
+CALDAV_BASE_URL = "https://apidata.googleusercontent.com/caldav/v2/"
+
+[gate_config]
+render_owned = ["horizon.calendar_servers"]
+[gate_config.defaults.horizon]
+calendar_servers = ["{{connector.name}}"]

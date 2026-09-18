@@ -1,0 +1,1 @@
+- **Appointments, Google** (`calendar`, server `{{connector.name}}`): same CalDAV tools as the iCloud calendar (`list-calendars`, `list-events` with `calendarUrl`, `create-event`, `update-event`, `delete-event`).{{#if connector.disabled}} Currently disabled at the gateway: {{connector.note}}{{/if}}

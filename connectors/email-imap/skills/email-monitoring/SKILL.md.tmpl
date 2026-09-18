@@ -1,0 +1,81 @@
+---
+name: email-monitoring
+description: Set up, change or pause how Scotty watches {{name}}'s mailboxes in the background (/email_monitoring, "watch my mail", "tell me when important mail arrives", "change how you handle my email"). Interviews {{name}}, writes {{his}} rules into the email-triage skill and creates the gated mail-watch cron job.
+version: 2.0.0
+metadata:
+  hermes:
+    tags: [email, background, setup, personal]
+    category: personal
+    requires_toolsets: [mcp-email, cronjob, skills, file]
+---
+
+# Email monitoring (setup)
+
+You configure a background job that watches {{name}}'s mail and applies {{his}}
+own rules. The rules live in the `email-triage` skill; this skill only collects
+them. Aim for a job that feels personal: pre-fill every default with what you
+know about {{him}} and ask about the rest.
+
+## 1. Find out where we stand
+- `cronjob` action `list`. If a job named `mail-watch` exists this is a change
+  request: `skill_view` `email-triage`, show the "Your rules" block in 5 lines,
+  ask only what should change, then continue at step 3.
+- `recall` (hindsight group; `tool_search` "recall") "{{name}} email work people
+  deadlines" and read USER.md in your prompt. Use employer, studies, family,
+  recurring contacts to pre-fill the defaults below.
+
+## 2. Interview, two batches
+Ask each batch as one numbered message with the default in brackets. "ok"
+accepts all defaults. Do not explain the mechanics; keep it to the questions.
+
+Batch 1, what and when
+1. Accounts to watch [{{connector.account_names_csv}}].
+2. When to hear from me: (a) every new mail, (b) only mail that matters,
+   (c) a digest at fixed times [b].
+3. What matters: mail that needs a reply from {{him}}; people: <pre-filled>;
+   topics: invoices and due dates, appointments, deliveries, contracts,
+   work and studies [confirm or add]. Never: newsletters, marketing,
+   social-network notifications, automated receipts.
+4. Active hours [{{active_from}} to {{active_to}}, every day].
+5. Mailbox handling: (a) mark a mail read once I have looked at it, so I never
+   report it twice, or (b) leave the mailbox untouched and I remember what I
+   have seen [a].
+
+Batch 2, how to act
+6. What I may do without asking: draft a reply into Drafts when a mail needs
+   an answer [yes]; create a Todoist task for deadlines and invoices [yes];
+   anything else [no].
+7. Style: language [the one {{he}} writes in], one message per batch of mail,
+   1 to 2 lines per mail, a one-word question at the end when something is
+   pending [confirm].
+8. Senders or domains to always escalate, and to always ignore [none].
+
+## 3. Write the rules
+`skill_view` `email-triage`. Replace only the block between
+`<!-- rules:start -->` and `<!-- rules:end -->` with `skill_manage` action
+`patch` (`old_string` = the current block, `new_string` = the new block). Keep
+the same bullet headings, fill them from the answers, end with
+`Updated: <today> via /email_monitoring`. Never touch the other sections.
+
+## 4. Configure the gate script
+`write_file` `/opt/data/profiles/{{profile}}/scripts/gate_config.json` with the
+existing content updated: `mail.accounts` from Q1 and `mail.mark_read` from
+Q5 (`true` for (a), `false` for (b)). Leave the `horizon` section as it is.
+
+## 5. Create or update the job
+`cronjob` with name `mail-watch`:
+- schedule: `*/15 H1-H2 * * *` with the hours from Q4 (digest mode (c):
+  `0 <times> * * *` instead, and say in the rules block that runs are digests)
+- script: `mail_gate.py`
+- skills: `["email-triage", "personal-tools"]`
+- prompt: "New mail arrived (Script Output above). Apply the email-triage
+  rules. On a Script Error tell me in one line what failed and stop."
+- delivery, `attach_to_session`, `enabled_toolsets`: leave unset.
+Existing job: `update` the schedule, never delete it. "Pause" or "stop" means
+`pause`; "remove" means `remove`.
+
+## 6. Finish
+Confirm in 2 to 3 lines: which accounts, when you speak up, what you may do,
+and that `/email_monitoring` changes it and `/email_triage` runs a check now.
+If a skill named `email-triage-guidelines` still exists, `skill_manage`
+`delete` it; its content now lives in `email-triage`.
