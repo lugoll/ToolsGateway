@@ -1,0 +1,64 @@
+# Tests the gateway on every change to services/scotty-gateway/ and publishes the
+# image on a tag `gateway-vX.Y.Z` as ghcr.io/<owner>/scotty-gateway:X.Y.Z
+# (linux/amd64 for the laptop, linux/arm64 for the Pi).
+name: scotty-gateway
+
+on:
+  push:
+    branches: [main]
+    paths: ["services/scotty-gateway/**", ".github/workflows/scotty-gateway.yml"]
+    tags: ["gateway-v*"]
+  pull_request:
+    paths: ["services/scotty-gateway/**"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/scotty-gateway
+    services:
+      greenmail:
+        image: greenmail/standalone:2.1.14
+        env:
+          GREENMAIL_OPTS: "-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.auth.disabled"
+        ports: ["3025:3025", "3143:3143"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.21"
+      - run: uv sync --locked
+      - name: wait for GreenMail
+        run: for i in $(seq 30); do (exec 3<>/dev/tcp/127.0.0.1/3143) 2>/dev/null && exit 0; sleep 2; done; exit 1
+      - run: uv run pytest -q
+        env:
+          SCOTTY_TEST_IMAP: 127.0.0.1:3143
+          SCOTTY_TEST_SMTP: 127.0.0.1:3025
+
+  image:
+    if: startsWith(github.ref, 'refs/tags/gateway-v')
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: version
+        run: echo "tag=${GITHUB_REF_NAME#gateway-v}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: services/scotty-gateway
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/scotty-gateway:${{ steps.version.outputs.tag }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}

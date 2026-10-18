@@ -15,7 +15,7 @@ doc  = "app-specific password from appleid.apple.com → Sign-In and Security"
 [gateway]
 type    = "stdio"
 command = "npx"
-args    = ["-y", "caldav-mcp"]
+args    = ["-y", "caldav-mcp@0.10.0"]   # pinned: bump deliberately
 [gateway.env]
 CALDAV_USERNAME = "${ICLOUD_EMAIL_{{USER}}}"
 CALDAV_PASSWORD = "${ICLOUD_APP_PASSWORD_{{USER}}}"

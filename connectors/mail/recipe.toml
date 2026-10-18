@@ -1,0 +1,61 @@
+# Mailboxes through the gateway's native mail module (services/scotty-gateway,
+# modules/mail): IMAP with an app password for iCloud and t-online, the Gmail
+# API with OAuth (scope gmail.modify) for Gmail. Read and draft only: the module
+# has no code that sends, forwards, moves or deletes mail. A member picks
+# accounts in members.toml (`accounts = ["icloud", "gmail"]`). Recipe format:
+# connectors/README.md.
+name   = "email"                   # gateway server name "email-<user>"
+domain = "email"
+doc    = "{{his}} {{connector.account_list}} {{#if connector.multi}}mailboxes{{else}}mailbox{{/if}}"
+
+[gateway]
+type   = "native"
+module = "mail"
+[gateway.config]
+# Every chosen account table below, minus label-only keys (`env`), as the
+# module's account config. A lone placeholder keeps the table type.
+accounts = "{{connector.account_map}}"
+
+# Accounts a member can choose from. Every string is a template: {{USER}} is
+# the member's upper-cased id, so the variables become ICLOUD_EMAIL_LUKAS etc.
+# Optional per account (module README): capabilities = ["read", "mark_read",
+# "draft"] (default all), drafts = "any" | "reply-only" (default any).
+[accounts.icloud]
+label    = "iCloud"
+env      = [{ stem = "ICLOUD_EMAIL", doc = "iCloud address" },
+            { stem = "ICLOUD_APP_PASSWORD", doc = "app-specific password from appleid.apple.com" }]
+backend  = "imap"
+email    = "${ICLOUD_EMAIL_{{USER}}}"
+username = "${ICLOUD_EMAIL_{{USER}}}"
+password = "${ICLOUD_APP_PASSWORD_{{USER}}}"
+host     = "imap.mail.me.com"
+port     = 993
+
+[accounts.tonline]
+label    = "t-online"
+env      = [{ stem = "TONLINE_EMAIL", doc = "t-online address" },
+            { stem = "TONLINE_APP_PASSWORD", doc = "t-online mail password (Passwort für E-Mail-Programme)" }]
+backend  = "imap"
+email    = "${TONLINE_EMAIL_{{USER}}}"
+username = "${TONLINE_EMAIL_{{USER}}}"
+password = "${TONLINE_APP_PASSWORD_{{USER}}}"
+host     = "secureimap.t-online.de"
+port     = 993
+
+# Gmail: no password. Authorise once with
+#   docker compose run --rm -p 127.0.0.1:8765:8765 mcp-gateway-<user> auth email-<user> gmail
+# (services/scotty-gateway/README.md, "Authorising a Gmail account"). The OAuth
+# client is one per household, hence the global (unsuffixed) variables.
+[accounts.gmail]
+label    = "Gmail"
+env      = [{ stem = "GMAIL_EMAIL", doc = "Gmail address" },
+            { stem = "GOOGLE_OAUTH_CLIENT_ID", global = true, doc = "OAuth client id (Desktop app) of the household's Google Cloud project" },
+            { stem = "GOOGLE_OAUTH_CLIENT_SECRET", global = true, doc = "OAuth client secret of that client" }]
+backend  = "gmail"
+email    = "${GMAIL_EMAIL_{{USER}}}"
+
+# mail_gate.py reads these; the /email_monitoring skill rewrites mail.accounts
+# and mail.mark_read from the interview, so they are seeded only on create.
+[gate_config.defaults.mail]
+accounts  = "{{connector.account_names}}"    # a lone placeholder keeps the list type
+mark_read = true
