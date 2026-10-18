@@ -7,7 +7,10 @@ and settings such as forwarding rules. It does permit sending; this module has
 no code that sends, and the token never leaves this container.
 
 Mailboxes are labels (INBOX, user labels); unread is the UNREAD label; message
-ids are Gmail's own ids. The refresh token lives in <data>/tokens/<account>.json
+ids are Gmail's own ids. Moving a mail = adding the destination label and
+removing INBOX and its other user labels; "archive" removes them without adding
+one. TRASH goes through messages.trash (recoverable for 30 days, never the
+permanent delete), SPAM is a label change; both are flagged in the action log. The refresh token lives in <data>/tokens/<account>.json
 (written by `scotty-gateway auth`, mode 0600).
 """
 from __future__ import annotations
@@ -80,8 +83,8 @@ class GmailBackend:
     def _labels(self) -> list[dict]:
         return self._call("GET", "/labels").get("labels", [])
 
-    def _label_id(self, mailbox: str) -> str:
-        labels = self._labels()
+    def _label_id(self, mailbox: str, labels: list[dict] | None = None) -> str:
+        labels = self._labels() if labels is None else labels
         for lab in labels:
             if mailbox in (lab["id"], lab["name"]) or mailbox.lower() == lab["name"].lower():
                 return lab["id"]
@@ -169,6 +172,31 @@ class GmailBackend:
     def mark(self, msg_id: str, read: bool) -> None:
         body = {"removeLabelIds": ["UNREAD"]} if read else {"addLabelIds": ["UNREAD"]}
         self._call("POST", f"/messages/{msg_id}/modify", json=body)
+
+    def move(self, msg_id: str, to: str) -> dict:
+        labels = self._labels()
+        names = {lab["id"]: lab["name"] for lab in labels}
+        target = None if to.lower() == "archive" else self._label_id(to, labels)
+        meta = self._call("GET", f"/messages/{msg_id}",
+                          params=[("format", "metadata"), ("metadataHeaders", "From"), ("metadataHeaders", "Subject")])
+        current = meta.get("labelIds", [])
+        location = {"INBOX", "SPAM"} | {lab["id"] for lab in labels if lab.get("type") == "user"}
+        remove = [lab for lab in current if lab in location and lab != target]
+        if target in current and not remove:
+            raise MailError(f"the mail is already in '{to}'")
+        if target == "TRASH":
+            self._call("POST", f"/messages/{msg_id}/trash")
+        else:
+            if "TRASH" in current:                      # a label change alone leaves it in Trash
+                self._call("POST", f"/messages/{msg_id}/untrash")
+            body: dict = {"removeLabelIds": remove}
+            if target:
+                body["addLabelIds"] = [target]
+            self._call("POST", f"/messages/{msg_id}/modify", json=body)
+        summary = self._to_summary(meta)
+        return {"from": [names.get(lab, lab) for lab in remove], "to": names.get(target, "archive"),
+                "destination_kind": {"TRASH": "trash", "SPAM": "spam"}.get(target),
+                "subject": summary["subject"], "sender": summary["from"]}
 
     def original(self, msg_id: str) -> dict:
         return self.get(msg_id)

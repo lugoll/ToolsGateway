@@ -8,7 +8,8 @@ replaces 1MCP and the email-mcp sidecar.
   stdio (`npx`, `uvx`, any command) or HTTP entries.
 - **Native modules** (Python, in this package): integrations without a usable
   upstream server. The first is `mail`: IMAP accounts plus Gmail over the
-  Gmail API with OAuth. It can read and draft; nothing sends.
+  Gmail API with OAuth. It can read, mark, move and draft; nothing sends or
+  permanently deletes, and every change to a mailbox is logged.
 - **Per-domain endpoints** `/mcp/<domain>` (stateless streamable HTTP), a REST
   endpoint for scripts, health endpoints that do real checks, and a bearer
   token on everything except `/health/live`.
@@ -72,11 +73,13 @@ The `config` table of a `module = "mail"` server:
               "host": "imap.mail.me.com", "port": 993, "username": "a@icloud.com",
               "password": "${ICLOUD_APP_PASSWORD_LUKAS}"},
    "gmail":  {"backend": "gmail", "label": "Gmail", "email": "a@gmail.com",
-              "capabilities": ["read", "mark_read", "draft"], "drafts": "any"}}}
+              "capabilities": ["read", "mark_read", "draft", "move"], "drafts": "any"}}}
 ```
 
-- **Tools:** `list_accounts`, `list_mailboxes`, `list_emails`, `search_emails`, `get_email`, `get_thread`, `mark_email`, `save_draft`. Nothing else: there is no code that sends, forwards, moves or deletes, and a test asserts the tool set.
-- **capabilities** (default all): `read`, `mark_read` (the `\Seen` flag or `UNREAD` label), `draft`.
+- **Tools:** `list_accounts`, `list_mailboxes`, `list_emails`, `search_emails`, `get_email`, `get_thread`, `mark_email`, `move_email`, `save_draft`. Nothing else: there is no code that sends, forwards or permanently deletes, and a test asserts the tool set.
+- **capabilities** (default all): `read`, `mark_read` (the `\Seen` flag or `UNREAD` label), `draft`, `move`.
+- **move_email:** to any existing folder or label, or `archive`. Trash and Spam are allowed and flagged `destination_kind` in the log. IMAP uses MOVE; servers without it (iCloud) get COPY, then `\Deleted` and `UID EXPUNGE` of that one UID (UIDPLUS required, so other messages are never expunged). Gmail moves by labels; Trash goes through `messages.trash` (30 days recoverable).
+- **Action log:** every move, mark and draft is one JSON line in `/data/<server>/actions.jsonl` (account, id, origin, destination, sender, subject; never bodies), rotated at 5 MB × 5, and also in `docker logs`. Trash and Spam moves are logged as warnings.
 - **drafts:** `any` (default) or `reply-only`. Reply-only means drafts are only replies, and only to people already in the original mail.
 - **IMAP:** one connection per call with 20 s socket timeouts. A provider reset fails one call, never the process. Ids are `<mailbox>|<uidvalidity>|<uid>`. Drafts go to the `\Drafts` special-use folder, or `drafts_folder`.
 - **Gmail:** the REST API with scope `gmail.modify`: read, labels and drafts, but no permanent delete and no settings. The scope would allow sending; this code never does. The token lives in `/data/<server>/tokens/<account>.json` (0600).

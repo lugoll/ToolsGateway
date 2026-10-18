@@ -1,4 +1,4 @@
-"""Native mail module: IMAP and Gmail-API mailboxes, read and draft only."""
+"""Native mail module: IMAP and Gmail-API mailboxes. Read, mark, move, draft; never send or delete."""
 from __future__ import annotations
 
 from fastmcp import FastMCP

@@ -1,9 +1,10 @@
 # Mailboxes through the gateway's native mail module (services/scotty-gateway,
 # modules/mail): IMAP with an app password for iCloud and t-online, the Gmail
-# API with OAuth (scope gmail.modify) for Gmail. Read and draft only: the module
-# has no code that sends, forwards, moves or deletes mail. A member picks
-# accounts in members.toml (`accounts = ["icloud", "gmail"]`). Recipe format:
-# connectors/README.md.
+# API with OAuth (scope gmail.modify) for Gmail. The agent may read, mark, move
+# (Trash and Spam included) and draft, and every change is logged
+# (actions.jsonl); the module has no code that sends or permanently deletes.
+# A member picks accounts in members.toml (`accounts = ["icloud", "gmail"]`).
+# Recipe format: connectors/README.md.
 name   = "email"                   # gateway server name "email-<user>"
 domain = "email"
 doc    = "{{his}} {{connector.account_list}} {{#if connector.multi}}mailboxes{{else}}mailbox{{/if}}"
@@ -19,7 +20,7 @@ accounts = "{{connector.account_map}}"
 # Accounts a member can choose from. Every string is a template: {{USER}} is
 # the member's upper-cased id, so the variables become ICLOUD_EMAIL_LUKAS etc.
 # Optional per account (module README): capabilities = ["read", "mark_read",
-# "draft"] (default all), drafts = "any" | "reply-only" (default any).
+# "draft", "move"] (default all), drafts = "any" | "reply-only" (default any).
 [accounts.icloud]
 label    = "iCloud"
 env      = [{ stem = "ICLOUD_EMAIL", doc = "iCloud address" },

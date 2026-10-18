@@ -1,5 +1,11 @@
 """IMAP accounts (iCloud, t-online, any provider with an app password).
 
+Moving uses IMAP MOVE (RFC 6851). Servers without it (iCloud) get the RFC 6851
+fallback, restricted to what cannot lose mail: COPY first (a failure leaves the
+original untouched), then \\Deleted on that one UID and UID EXPUNGE of that one
+UID (UIDPLUS), so no other message is ever expunged. Without UIDPLUS moving is
+refused. Nothing else in this module removes mail.
+
 One connection per call: connect, log in, act, log out. There is no idle
 connection a provider can reset under us, which is what crashed email-mcp;
 a network error fails that one call and the next call starts clean.
@@ -9,6 +15,7 @@ one mailbox and one UIDVALIDITY generation, so the id carries both.
 """
 from __future__ import annotations
 
+import re
 import ssl
 from contextlib import contextmanager
 from datetime import date, datetime, timezone
@@ -22,6 +29,12 @@ from .parse import clip, decode_words, iso, parse_message
 SEEN = b"\\Seen"
 DRAFT = b"\\Draft"
 DRAFT_FALLBACKS = ("Drafts", "Entwürfe", "INBOX.Drafts", "Draft")
+ARCHIVE_FALLBACKS = ("Archive", "Archiv", "INBOX.Archive")
+DELETED = b"\\Deleted"
+# Destinations that providers empty on their own: allowed, but flagged in the action log.
+TRASH_FLAGS = {"\\trash": "trash", "\\junk": "spam"}
+TRASH_NAMES = re.compile(r"(?P<trash>trash|deleted|papierkorb|gel(ö|oe)scht|bin$)|(?P<spam>junk|spam)",
+                         re.IGNORECASE)
 THREAD_MAX_IDS = 20
 SUMMARY_FIELDS = [b"ENVELOPE", b"FLAGS", b"INTERNALDATE"]
 
@@ -199,10 +212,47 @@ class ImapBackend:
         return ["OR"] * (len(terms) - 1) + [word for term in terms for word in term]
 
     # --------------------------------------------------------------- writes
+    def _locate(self, c: IMAPClient, msg_id: str, readonly: bool) -> tuple[str, int]:
+        """Select the message's mailbox and check that the id is still valid."""
+        mailbox, validity, uid = split_id(msg_id)
+        if self._select(c, mailbox, readonly=readonly) != validity:
+            raise MailError(f"message id '{msg_id}' is stale (mailbox was rebuilt); list the mailbox again")
+        if not c.search(["UID", uid]):
+            raise MailError(f"message '{msg_id}' not found (moved or deleted)")
+        return mailbox, uid
+
     def mark(self, msg_id: str, read: bool) -> None:
         with self._client() as c:
-            _, _, uid, _, _ = self._fetch_raw(c, msg_id, readonly=False)
+            _, uid = self._locate(c, msg_id, readonly=False)
             (c.add_flags if read else c.remove_flags)([uid], [SEEN], silent=True)
+
+    def move(self, msg_id: str, to: str) -> dict:
+        with self._client() as c:
+            folders = {name: {f.decode().lower() for f in flags} for flags, _, name in c.list_folders()}
+            if to not in folders and to.lower() == "archive":
+                to = next((n for n, fl in folders.items() if "\\archive" in fl), None) or \
+                    next((n for n in ARCHIVE_FALLBACKS if n in folders), to)
+            if to not in folders:
+                raise MailError(f"mailbox '{to}' not found; see list_mailboxes (folders are not created)")
+            mailbox, uid = self._locate(c, msg_id, readonly=False)
+            if mailbox == to:
+                raise MailError(f"the mail is already in '{to}'")
+            env = c.fetch([uid], [b"ENVELOPE"]).get(uid, {}).get(b"ENVELOPE")
+            if c.has_capability("MOVE"):
+                c.move([uid], to)
+            elif c.has_capability("UIDPLUS"):
+                c.copy([uid], to)                       # raises on failure: original untouched
+                c.add_flags([uid], [DELETED], silent=True)
+                c.uid_expunge([uid])                    # this one UID only
+            else:
+                raise MailError(f"{self.acc.host} supports neither MOVE nor UIDPLUS; "
+                                "moving is not available for this account")
+        kind = next((k for f, k in TRASH_FLAGS.items() if f in folders[to]), None)
+        if kind is None and (m := TRASH_NAMES.search(to)):
+            kind = "trash" if m.group("trash") else "spam"
+        return {"from": mailbox, "to": to, "destination_kind": kind,
+                "subject": decode_words(env.subject) if env and env.subject else "",
+                "sender": _addresses(env.from_) if env else ""}
 
     def original(self, msg_id: str) -> dict:
         return self.get(msg_id)

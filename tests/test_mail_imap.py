@@ -49,6 +49,8 @@ def backend():
     with IMAPClient(host, port=int(port), ssl=False) as c:
         c.login(user, "pw")
         c.create_folder("Drafts")
+        c.create_folder("Archiv")
+        c.create_folder("Trash")
     return ImapBackend(acc, timeout=10, max_body_chars=1000)
 
 
@@ -140,3 +142,59 @@ def test_through_gateway_and_gate_parser(backend, env):
     items = mod.parse_email_list(json.loads(text))
     assert len(items) == 3 and all(i["unread"] and "|" in i["id"] for i in items)
     assert items[0]["subject"] == "Re: Rechnung Oktober"
+
+
+def test_move(backend):
+    mail = backend.search("Freitag", None, 5)["emails"][0]
+    if not _has_move(backend):
+        with pytest.raises(MailError, match="does not support IMAP MOVE"):
+            backend.move(mail["id"], "Archiv")
+        pytest.skip("server lacks MOVE: refusal verified, move itself untested here")
+    with pytest.raises(MailError, match="not found"):
+        backend.move(mail["id"], "Nowhere")
+    out = backend.move(mail["id"], "archive")                                   # fallback name
+    assert out == {"from": "INBOX", "to": "Archiv", "destination_kind": None,
+                   "subject": "Rechnung Oktober", "sender": "Jürgen Example <j@example.org>"}
+    assert backend.list("INBOX", None, None, None, None, 25, 1)["total"] == 2
+    moved = backend.list("Archiv", None, None, None, None, 5, 1)["emails"]
+    assert [m["subject"] for m in moved] == ["Rechnung Oktober"] and moved[0]["unread"]
+    with pytest.raises(MailError, match="not found"):
+        backend.move(mail["id"], "Archiv")                     # old id is gone from INBOX
+
+
+def _has_move(backend) -> bool:
+    with IMAPClient(backend.acc.host, port=backend.acc.port, ssl=False) as c:
+        return c.has_capability("MOVE")
+
+
+def test_move_to_trash_is_flagged(backend):
+    mail = backend.search("Berlin", None, 5)["emails"][0]
+    assert backend.move(mail["id"], "Trash")["destination_kind"] == "trash"
+    assert [m["subject"] for m in backend.list("Trash", None, None, None, None, 5, 1)["emails"]] == ["Grüße aus Berlin"]
+
+
+def test_move_fallback_without_move_capability(backend, monkeypatch):
+    """iCloud: no MOVE, but UIDPLUS. Copy, then expunge exactly that one UID."""
+    real = IMAPClient.has_capability
+    monkeypatch.setattr(IMAPClient, "has_capability",
+                        lambda self, cap: False if cap.upper() == "MOVE" else real(self, cap))
+    if not _has_capability(backend, "UIDPLUS"):
+        pytest.skip("test server lacks UIDPLUS")
+    # A bystander already flagged \Deleted in INBOX must survive the move (plain EXPUNGE would remove it).
+    host, port = backend.acc.host, backend.acc.port
+    bystander = backend.search("Berlin", None, 5)["emails"][0]["id"].rsplit("|", 1)[1]
+    with IMAPClient(host, port=port, ssl=False) as c:
+        c.login(backend.acc.username, "pw")
+        c.select_folder("INBOX")
+        c.add_flags([int(bystander)], [b"\\Deleted"])
+    mail = backend.search("Freitag", None, 5)["emails"][0]
+    assert backend.move(mail["id"], "Archiv")["to"] == "Archiv"
+    assert [m["subject"] for m in backend.list("Archiv", None, None, None, None, 5, 1)["emails"]] == ["Rechnung Oktober"]
+    subjects = [m["subject"] for m in backend.list("INBOX", None, None, None, None, 25, 1)["emails"]]
+    assert "Rechnung Oktober" not in subjects and "Grüße aus Berlin" in subjects
+
+
+def _has_capability(backend, cap) -> bool:
+    with IMAPClient(backend.acc.host, port=backend.acc.port, ssl=False) as c:
+        c.login(backend.acc.username, "pw")
+        return c.has_capability(cap)

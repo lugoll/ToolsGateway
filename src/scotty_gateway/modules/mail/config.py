@@ -5,12 +5,13 @@
        "icloud": {"backend": "imap", "label": "iCloud", "email": "a@icloud.com",
                   "host": "imap.mail.me.com", "port": 993,
                   "username": "a@icloud.com", "password": "...",
-                  "capabilities": ["read", "mark_read", "draft"], "drafts": "any"},
+                  "capabilities": ["read", "mark_read", "draft", "move"], "drafts": "any"},
        "gmail":  {"backend": "gmail", "label": "Gmail", "email": "a@gmail.com"}}}
 
 capabilities: what the agent may do with the account. `read` lists and opens
-mail; `mark_read` changes the \\Seen flag / UNREAD label; `draft` saves drafts.
-Nothing sends, moves or deletes mail; there is no code for it.
+mail; `mark_read` changes the \\Seen flag / UNREAD label; `draft` saves drafts;
+`move` moves a mail to another folder / label, Trash and Spam included (every
+move is written to the action log). Nothing sends or permanently deletes mail.
 drafts: "any" (default) or "reply-only" (only replies, only to people already in
 the thread; blunts the "Trojan draft" exfiltration path).
 """
@@ -19,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-CAPABILITIES = ("read", "mark_read", "draft")
+CAPABILITIES = ("read", "mark_read", "draft", "move")
 BACKENDS = ("imap", "gmail")
 ACCOUNT_KEYS = {"backend", "label", "email", "capabilities", "drafts",
                 "host", "port", "username", "password", "tls", "drafts_folder", "token_file"}
