@@ -1,1 +1,0 @@
-- **Tasks** (`todoist`): `find-tasks` / `find-tasks-by-date` to read, `add-tasks` to create, `complete-tasks`, `update-tasks`, `reschedule-tasks`. `get-overview` gives a quick project summary. Prefer natural-language due dates ("tomorrow 9am").

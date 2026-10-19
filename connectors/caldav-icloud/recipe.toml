@@ -1,28 +1,14 @@
 # iCloud calendar over CalDAV (caldav-mcp), stdio inside the member's gateway.
-# Needs the iCloud address and an app-specific password. Recipe format:
-# connectors/README.md.
-name   = "calendar-icloud"         # server key "calendar-icloud-<user>"
+# Recipe format: connectors/README.md. Needs ICLOUD_EMAIL (Apple ID) and
+# ICLOUD_APP_PASSWORD (app-specific password, appleid.apple.com → Sign-In and Security).
+name   = "calendar-icloud"         # server "calendar-icloud-<member>"
 domain = "calendar"
-doc    = "{{his}} iCloud calendar"
 
-[[env]]
-stem = "ICLOUD_EMAIL"
-doc  = "iCloud address (Apple ID)"
-[[env]]
-stem = "ICLOUD_APP_PASSWORD"
-doc  = "app-specific password from appleid.apple.com → Sign-In and Security"
-
-[gateway]
+[server]
 type    = "stdio"
 command = "npx"
 args    = ["-y", "caldav-mcp@0.10.0"]   # pinned: bump deliberately
-[gateway.env]
-CALDAV_USERNAME = "${ICLOUD_EMAIL_{{USER}}}"
-CALDAV_PASSWORD = "${ICLOUD_APP_PASSWORD_{{USER}}}"
+[server.env]
+CALDAV_USERNAME = "${ICLOUD_EMAIL}"
+CALDAV_PASSWORD = "${ICLOUD_APP_PASSWORD}"
 CALDAV_BASE_URL = "https://caldav.icloud.com/"
-
-# The gate scripts scan every calendar server listed here (horizon_gate.py).
-[gate_config]
-render_owned = ["horizon.calendar_servers"]
-[gate_config.defaults.horizon]
-calendar_servers = ["{{connector.name}}"]

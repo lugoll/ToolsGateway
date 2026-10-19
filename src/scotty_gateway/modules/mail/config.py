@@ -1,4 +1,4 @@
-"""Mail module config: the server's "config" table in gateway.json.
+"""Mail module config: the server's "config" table (recipe connectors/mail, accounts chosen per member).
 
     {"max_body_chars": 20000, "timeout": 20,
      "accounts": {

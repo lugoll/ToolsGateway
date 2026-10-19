@@ -133,8 +133,8 @@ def test_through_gateway_and_gate_parser(backend, env):
     status, body = asyncio.run(gw.invoke("email-tester", "list_emails", {"account": "test", "seen": False}))
     assert status == 200 and not body["result"]["isError"]
 
-    gate = Path(__file__).resolve().parents[3] / "templates/profile/scripts/_gateway.py"
-    sys.dont_write_bytecode = True        # do not leave __pycache__ in templates/
+    gate = Path(__file__).resolve().parents[3] / "gates/_gateway.py"
+    sys.dont_write_bytecode = True        # do not leave __pycache__ in gates/
     spec = importlib.util.spec_from_file_location("gate_gateway", gate)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

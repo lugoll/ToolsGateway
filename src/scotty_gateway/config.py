@@ -1,23 +1,37 @@
-"""Gateway configuration: one JSON file per member, rendered by scripts/render.py.
+"""Gateway configuration: the member's connector list plus the recipes it names.
 
-    {
-      "member": "lukas",
-      "auth": {"token": "${GATEWAY_TOKEN_LUKAS}"},
-      "defaults": {"timeout": 60},
-      "servers": {
-        "<name>": {"domain": "todoist", "type": "stdio" | "http" | "native", ...}
-      }
-    }
+    # /etc/scotty-gateway/members/lukas.toml   (repo: config/gateway/lukas.toml)
+    member = "lukas"
+    [[connectors]]
+    recipe = "todoist"
+    [[connectors]]
+    recipe = "mail"
+    accounts = ["icloud", "gmail"]
+    [[connectors]]
+    recipe = "caldav-google"
+    disabled = true
+    note = "why, and what re-enables it"
 
-`${VAR}` anywhere in a string is replaced from the process environment. A
-server that references a missing variable is not started (it is reported with
-the reason); a missing auth token is fatal. Keys starting with `_` are comments.
+    # /etc/scotty-gateway/connectors/<recipe>/recipe.toml   (repo: connectors/)
+    name   = "todoist"            # server "todoist-<member>"
+    domain = "todoist"            # endpoint /mcp/todoist
+    [server]
+    type = "stdio" | "http" | "native"   (+ the keys of that type, allow, deny, ...)
+    [accounts.<id>]               # optional: the chosen ones become server.config.accounts
+
+Optional in the member file: `[auth] token` (default "${GATEWAY_TOKEN}"),
+`[defaults] timeout`, `log_level`. `${VAR}` anywhere in a string is replaced
+from the process environment. A server that references a missing variable is
+not started (it is reported with the reason); a missing auth token is fatal.
+Keys starting with `_` are comments. Every recipe's domain is served, also when
+this member uses none of its connectors (an empty endpoint), so one Hermes
+policy can list the household's domains for every member.
 """
 from __future__ import annotations
 
-import json
 import os
 import re
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -25,7 +39,11 @@ from typing import Any
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 VAR_RE = re.compile(r"\$\{(\w+)\}")
 TYPES = ("stdio", "http", "native")
-TOP_KEYS = {"member", "auth", "defaults", "servers", "log_level"}
+MEMBER_KEYS = {"member", "auth", "defaults", "connectors", "log_level"}
+ENTRY_KEYS = {"recipe", "accounts", "disabled", "note"}
+RECIPE_KEYS = {"name", "domain", "doc", "server", "accounts"}
+DEFAULT_TOKEN = "${GATEWAY_TOKEN}"
+DEFAULT_CONNECTORS = "/etc/scotty-gateway/connectors"
 COMMON_KEYS = {"domain", "type", "disabled", "note", "allow", "deny", "namespace", "timeout"}
 TYPE_KEYS = {
     "stdio": {"command", "args", "env", "cwd", "mode"},
@@ -77,12 +95,14 @@ class GatewayConfig:
     servers: dict[str, ServerConfig]
     data_dir: Path
     log_level: str = "INFO"
+    # Domains of recipes this member does not use: served as empty endpoints.
+    extra_domains: list[str] = field(default_factory=list)
 
     def domains(self) -> list[str]:
         out: list[str] = []
-        for s in self.servers.values():
-            if s.domain not in out:
-                out.append(s.domain)
+        for d in [s.domain for s in self.servers.values()] + self.extra_domains:
+            if d not in out:
+                out.append(d)
         return out
 
 
@@ -175,19 +195,64 @@ def parse_server(name: str, raw: dict, defaults: dict, env: dict[str, str]) -> S
     return srv
 
 
-def load(path: str | Path, env: dict[str, str] | None = None, data_dir: str | Path | None = None) -> GatewayConfig:
-    env = dict(os.environ) if env is None else env
-    path = Path(path)
+def _read_toml(path: Path) -> dict:
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        with open(path, "rb") as fh:
+            return tomllib.load(fh)
     except FileNotFoundError:
         raise ConfigError(f"{path}: not found") from None
-    except ValueError as exc:
-        raise ConfigError(f"{path}: invalid JSON ({exc})") from None
-    if not isinstance(raw, dict):
-        raise ConfigError(f"{path}: expected a JSON object")
-    raw = _strip_comments(raw)
-    unknown = set(raw) - TOP_KEYS
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"{path}: invalid TOML ({exc})") from None
+
+
+def load_recipe(connectors_dir: Path, rid: str) -> dict:
+    path = connectors_dir / rid / "recipe.toml"
+    raw = _strip_comments(_read_toml(path))
+    unknown = set(raw) - RECIPE_KEYS
+    if unknown:
+        raise ConfigError(f"{path}: unknown keys {sorted(unknown)}")
+    for key in ("name", "domain"):
+        if not isinstance(raw.get(key), str) or not NAME_RE.match(raw[key]):
+            raise ConfigError(f"{path}: '{key}' is required, lowercase letters, digits and '-'")
+    if not isinstance(raw.get("server"), dict):
+        raise ConfigError(f"{path}: a [server] table is required")
+    if not isinstance(raw.get("accounts", {}), dict):
+        raise ConfigError(f"{path}: 'accounts' must be a table of tables")
+    return raw
+
+
+def expand_connector(member: str, entry: Any, recipe: dict, where: str) -> tuple[str, dict]:
+    """One `[[connectors]]` entry -> (server name, raw server table)."""
+    if not isinstance(entry, dict):
+        raise ConfigError(f"{where}: expected a table")
+    unknown = set(entry) - ENTRY_KEYS
+    if unknown:
+        raise ConfigError(f"{where}: unknown keys {sorted(unknown)}")
+    raw = dict(recipe["server"])
+    raw["domain"] = recipe["domain"]
+    offered = recipe.get("accounts")
+    if offered:
+        chosen = _str_list(entry.get("accounts", []), f"{where}.accounts")
+        missing = [a for a in chosen if a not in offered]
+        if not chosen or missing:
+            raise ConfigError(f"{where}.accounts: pick from {', '.join(offered)}"
+                              + (f" (unknown: {', '.join(missing)})" if missing else ""))
+        raw["config"] = {**raw.get("config", {}), "accounts": {a: dict(offered[a]) for a in chosen}}
+    elif "accounts" in entry:
+        raise ConfigError(f"{where}.accounts: recipe '{entry['recipe']}' has no accounts")
+    if entry.get("disabled"):
+        if not entry.get("note"):
+            raise ConfigError(f"{where}: a disabled connector needs a 'note' (shown to the agent)")
+        raw["disabled"], raw["note"] = True, entry["note"]
+    return f"{recipe['name']}-{member}", raw
+
+
+def load(path: str | Path, env: dict[str, str] | None = None, data_dir: str | Path | None = None,
+         connectors_dir: str | Path | None = None) -> GatewayConfig:
+    env = dict(os.environ) if env is None else env
+    path = Path(path)
+    raw = _strip_comments(_read_toml(path))
+    unknown = set(raw) - MEMBER_KEYS
     if unknown:
         raise ConfigError(f"{path}: unknown keys {sorted(unknown)}")
     member = raw.get("member")
@@ -195,18 +260,34 @@ def load(path: str | Path, env: dict[str, str] | None = None, data_dir: str | Pa
         raise ConfigError(f"{path}: 'member' is required")
 
     missing: set[str] = set()
-    token = substitute(_strip_comments(raw.get("auth") or {}).get("token", ""), env, missing)
+    token = substitute(_strip_comments(raw.get("auth") or {}).get("token", DEFAULT_TOKEN), env, missing)
     if missing or not token:
         raise ConfigError(f"{path}: auth.token is required and must resolve "
                           f"(missing: {', '.join(sorted(missing)) or 'empty value'})")
     if len(token) < 24:
         raise ConfigError(f"{path}: auth.token is shorter than 24 characters")
 
+    cdir = Path(connectors_dir or env.get("SCOTTY_GATEWAY_CONNECTORS") or DEFAULT_CONNECTORS)
+    if not cdir.is_dir():
+        raise ConfigError(f"{cdir}: connectors directory not found")
+    recipes = {d.name: load_recipe(cdir, d.name) for d in sorted(cdir.iterdir())
+               if (d / "recipe.toml").is_file()}
+
     defaults = _strip_comments(raw.get("defaults") or {})
-    servers_raw = raw.get("servers") or {}
-    if not isinstance(servers_raw, dict):
-        raise ConfigError(f"{path}: 'servers' must be a table")
-    servers = {n: parse_server(n, s, defaults, env) for n, s in _strip_comments(servers_raw).items()}
+    entries = raw.get("connectors") or []
+    if not isinstance(entries, list):
+        raise ConfigError(f"{path}: 'connectors' must be an array of tables ([[connectors]])")
+    servers_raw: dict[str, dict] = {}
+    for i, entry in enumerate(entries):
+        where = f"{path}: connectors[{i}]"
+        rid = entry.get("recipe") if isinstance(entry, dict) else None
+        if rid not in recipes:
+            raise ConfigError(f"{where}.recipe: one of {', '.join(recipes)}")
+        name, server = expand_connector(member, entry, recipes[rid], where)
+        if name in servers_raw:
+            raise ConfigError(f"{where}: recipe '{rid}' is listed twice")
+        servers_raw[name] = server
+    servers = {n: parse_server(n, s, defaults, env) for n, s in servers_raw.items()}
 
     namespaces: dict[tuple[str, str], str] = {}
     for s in servers.values():
@@ -218,6 +299,8 @@ def load(path: str | Path, env: dict[str, str] | None = None, data_dir: str | Pa
                               f"servers.{namespaces[key]} in domain '{s.domain}'")
         namespaces[key] = s.name
 
+    used = {s.domain for s in servers.values()}
+    extra = [d for d in dict.fromkeys(r["domain"] for r in recipes.values()) if d not in used]
     data_dir = Path(data_dir or env.get("SCOTTY_GATEWAY_DATA", "/data"))
     return GatewayConfig(member=member, token=token, servers=servers, data_dir=data_dir,
-                         log_level=str(raw.get("log_level", "INFO")).upper())
+                         log_level=str(raw.get("log_level", "INFO")).upper(), extra_domains=extra)

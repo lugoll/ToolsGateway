@@ -24,7 +24,8 @@ RUN uv sync --locked --no-dev --no-editable
 ENV PATH=/app/.venv/bin:$PATH \
     HOME=/data/home \
     SCOTTY_GATEWAY_DATA=/data \
-    SCOTTY_GATEWAY_CONFIG=/etc/scotty-gateway/gateway.json \
+    SCOTTY_GATEWAY_CONFIG=/etc/scotty-gateway/member.toml \
+    SCOTTY_GATEWAY_CONNECTORS=/etc/scotty-gateway/connectors \
     PYTHONUNBUFFERED=1 \
     FASTMCP_SHOW_SERVER_BANNER=false \
     FASTMCP_CHECK_FOR_UPDATES=off

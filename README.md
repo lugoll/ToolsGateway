@@ -1,7 +1,7 @@
 # scotty-gateway
 
 The MCP gateway in front of each household member's integrations. One container
-per member (`mcp-gateway-<user>`), holding only that member's credentials. It
+per member (`mcp-gateway-<member>`), holding only that member's credentials. It
 replaces 1MCP and the email-mcp sidecar.
 
 - **Proxied servers** (Todoist, CalDAV, any MCP server): configuration only, as
@@ -15,8 +15,10 @@ replaces 1MCP and the email-mcp sidecar.
   token on everything except `/health/live`.
 
 Built on [FastMCP](https://gofastmcp.com) (`fastmcp==4.0.10`). The config is
-rendered from `members.toml` and `connectors/` by `scripts/render.py`; never
-edit `config/mcp-gateway-<user>/gateway.json` by hand.
+read at start from two read-only mounts: the member file
+(`config/gateway/<member>.toml`, `SCOTTY_GATEWAY_CONFIG`) and the recipes
+(`connectors/`, `SCOTTY_GATEWAY_CONNECTORS`). No hot reload: restart the
+container after a change.
 
 ## Endpoints
 
@@ -28,26 +30,29 @@ edit `config/mcp-gateway-<user>/gateway.json` by hand.
 | `/health/live` | none | the process is up (Docker healthcheck) |
 | `/health/ready` | Bearer | per server: real tool listing (cached 30 s), tool counts, errors, name collisions; 503 if a running server fails |
 
-## Config (`gateway.json`)
+## Config (member file + recipes)
 
-```json
-{
-  "member": "lukas",
-  "auth": {"token": "${GATEWAY_TOKEN_LUKAS}"},
-  "defaults": {"timeout": 60},
-  "servers": {
-    "todoist-lukas": {"domain": "todoist", "type": "stdio", "command": "npx",
-                      "args": ["-y", "@doist/todoist-mcp@8.0.0"],
-                      "env": {"TODOIST_API_KEY": "${TODOIST_API_KEY_LUKAS}"}},
-    "remote-lukas":  {"domain": "web", "type": "http", "url": "https://example.org/mcp",
-                      "headers": {"Authorization": "Bearer ${REMOTE_KEY_LUKAS}"}},
-    "email-lukas":   {"domain": "email", "type": "native", "module": "mail", "config": {"accounts": {}}}
-  }
-}
+The member file names recipes; each recipe's `[server]` table becomes one
+server named `<recipe name>-<member>`, with the recipe's `domain`. Format of
+both, and how accounts are picked: `connectors/README.md`.
+
+```toml
+# config/gateway/lukas.toml                  # connectors/todoist/recipe.toml
+member = "lukas"                             name   = "todoist"
+[[connectors]]                               domain = "todoist"
+recipe = "todoist"                           [server]
+[[connectors]]                               type    = "stdio"
+recipe = "mail"                              command = "npx"
+accounts = ["icloud", "gmail"]               args    = ["-y", "@doist/todoist-mcp@13.4.0"]
+                                             [server.env]
+                                             TODOIST_API_KEY = "${TODOIST_API_KEY}"
 ```
 
-Every server takes `domain`, `type`, and optionally:
-- `disabled` + `note`
+The auth token defaults to `${GATEWAY_TOKEN}` (`[auth] token` in the member
+file overrides it). Every recipe's domain is served, an empty endpoint when the
+member uses none of its connectors.
+
+Every `[server]` table takes `type`, and optionally (`disabled` + `note` come from the member's entry):
 - `allow` (glob list, null = all) and `deny` (globs; deny wins)
 - `namespace` (prefixes the server's tool names on the domain endpoint; needed when two servers of one domain share tool names)
 - `timeout` (seconds per call)
@@ -71,7 +76,7 @@ The `config` table of a `module = "mail"` server:
  "accounts": {
    "icloud": {"backend": "imap", "label": "iCloud", "email": "a@icloud.com",
               "host": "imap.mail.me.com", "port": 993, "username": "a@icloud.com",
-              "password": "${ICLOUD_APP_PASSWORD_LUKAS}"},
+              "password": "${ICLOUD_APP_PASSWORD}"},
    "gmail":  {"backend": "gmail", "label": "Gmail", "email": "a@gmail.com",
               "capabilities": ["read", "mark_read", "draft", "move"], "drafts": "any"}}}
 ```
@@ -126,4 +131,4 @@ SCOTTY_TEST_IMAP=127.0.0.1:3143 SCOTTY_TEST_SMTP=127.0.0.1:3025 uv run pytest
 docker build -t scotty-gateway:dev .         # local test image
 ```
 
-Releases: push a tag `gateway-vX.Y.Z`. CI runs the tests, builds `linux/amd64` + `linux/arm64` and pushes `ghcr.io/lugoll/scotty-gateway:X.Y.Z`. Then bump the tag in `templates/compose/gateway.yml.tmpl`.
+Releases: push a tag `gateway-vX.Y.Z`. CI runs the tests, builds `linux/amd64` + `linux/arm64` and pushes `ghcr.io/lugoll/scotty-gateway:X.Y.Z`. Then bump the tag in `docker-compose.yml` (`x-gateway`).

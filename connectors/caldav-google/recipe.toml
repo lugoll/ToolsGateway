@@ -1,32 +1,19 @@
 # Google calendar over CalDAV (caldav-mcp), stdio inside the member's gateway.
-# Uses the Gmail address and an app password (Google answers 401: CalDAV wants
-# OAuth; a Google-calendar module on the mail module's OAuth client is the
-# planned replacement). Recipe format:
-# connectors/README.md.
-name   = "calendar-gmail"          # server key "calendar-gmail-<user>"
+# Uses GMAIL_EMAIL and GMAIL_APP_PASSWORD (myaccount.google.com → Security →
+# App passwords). Google answers 401: CalDAV wants OAuth; a Google-calendar
+# module on the mail module's OAuth client is the planned replacement.
+# Recipe format: connectors/README.md.
+name   = "calendar-gmail"          # server "calendar-gmail-<member>"
 domain = "calendar"
-doc    = "{{his}} Google calendar"
 
-[[env]]
-stem = "GMAIL_EMAIL"
-doc  = "Gmail address"
-[[env]]
-stem = "GMAIL_APP_PASSWORD"
-doc  = "Google app password (myaccount.google.com → Security → App passwords)"
-
-[gateway]
+[server]
 type    = "stdio"
 command = "npx"
 args    = ["-y", "caldav-mcp@0.10.0"]   # pinned: bump deliberately
 # Same server as caldav-icloud, so the same tool names: prefix them (google_...)
 # so both calendars can sit in the `calendar` domain of one member.
 namespace = "google"
-[gateway.env]
-CALDAV_USERNAME = "${GMAIL_EMAIL_{{USER}}}"
-CALDAV_PASSWORD = "${GMAIL_APP_PASSWORD_{{USER}}}"
+[server.env]
+CALDAV_USERNAME = "${GMAIL_EMAIL}"
+CALDAV_PASSWORD = "${GMAIL_APP_PASSWORD}"
 CALDAV_BASE_URL = "https://apidata.googleusercontent.com/caldav/v2/"
-
-[gate_config]
-render_owned = ["horizon.calendar_servers"]
-[gate_config.defaults.horizon]
-calendar_servers = ["{{connector.name}}"]

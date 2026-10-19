@@ -1,13 +1,14 @@
 """scotty-gateway command line.
 
     scotty-gateway serve                      run the gateway (container default)
-    scotty-gateway check-config               validate gateway.json, show what would run
+    scotty-gateway check-config               validate the member file, show what would run
     scotty-gateway tools [--domain D]         list tools in-process (starts the backends)
     scotty-gateway call SERVER/TOOL [--args JSON]   call a tool in-process, no HTTP
     scotty-gateway <command> SERVER [...]     a native module's own command (mail: auth)
 
-The config path comes from --config or SCOTTY_GATEWAY_CONFIG
-(default /etc/scotty-gateway/gateway.json).
+The member file comes from --config or SCOTTY_GATEWAY_CONFIG (compose sets
+/etc/scotty-gateway/members/<member>.toml), the recipes from
+SCOTTY_GATEWAY_CONNECTORS (default /etc/scotty-gateway/connectors).
 """
 from __future__ import annotations
 
@@ -22,7 +23,7 @@ from . import audit
 from .config import ConfigError, GatewayConfig, load
 from .modules import ModuleContext, load_module
 
-DEFAULT_CONFIG = "/etc/scotty-gateway/gateway.json"
+DEFAULT_CONFIG = "/etc/scotty-gateway/member.toml"
 
 
 def _load(path: str) -> GatewayConfig:

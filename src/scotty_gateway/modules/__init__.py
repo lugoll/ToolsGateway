@@ -30,7 +30,7 @@ MODULES = {
 
 @dataclass
 class ModuleContext:
-    server: str          # server name in gateway.json, e.g. "email-lukas"
+    server: str          # server name (recipe name + member), e.g. "email-lukas"
     member: str          # member id, e.g. "lukas"
     data_dir: Path       # writable, private to this server: <data>/<server>
     log: logging.Logger
