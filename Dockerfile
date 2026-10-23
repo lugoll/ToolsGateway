@@ -12,8 +12,11 @@ COPY gateway ./gateway
 RUN uv sync --locked --no-dev --no-editable
 
 FROM python:3.14.7-slim-bookworm
-# Debian security fixes that are newer than the base image.
-RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+# Debian security fixes that are newer than the base image. pip is not needed at runtime (the venv
+# comes from the build stage) and its vendored packages (certifi, urllib3, ...) lag behind: removed.
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/* \
+ && rm -rf /usr/local/bin/pip* /usr/local/lib/python3.*/site-packages/pip* \
+           /usr/local/lib/python3.*/ensurepip
 WORKDIR /app
 COPY --from=build /app/.venv /app/.venv
 COPY catalog ./catalog
