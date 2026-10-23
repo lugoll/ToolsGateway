@@ -1,0 +1,18 @@
+# Local development: `docker compose up -d --build`.
+# Variables in .env.local (template: .env.example, never commit it);
+# the database lives in ./data. Pi deployment: deploy/docker-compose.yaml.
+services:
+  tools-gateway:
+    build: .
+    image: tools-gateway:dev
+    container_name: tools-gateway
+    restart: unless-stopped
+    user: "1000:1000"
+    env_file: .env.local
+    volumes:
+      - ./data:/data
+    ports:
+      - "127.0.0.1:3050:3050"
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "3"}

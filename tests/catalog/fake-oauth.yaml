@@ -1,0 +1,12 @@
+# Test-only: a remote MCP server behind MCP OAuth (tests/test_oauth.py).
+id: fake-oauth
+label: Fake OAuth server
+kind: remote
+integration: secured
+fields:
+  - name: url
+    label: URL
+    type: url
+oauth:
+  provider: mcp
+timeout: 10

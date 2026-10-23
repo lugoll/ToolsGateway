@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Add connection · Tools Gateway{% endblock %}
+{% block content %}
+<h1>Add a connection</h1>
+<p class="muted">Accounts of the same kind (all mailboxes, all calendars) appear to the agent as one tool set.</p>
+{% for group, entries in groups.items() %}
+<section class="card">
+  <h2>{{ group }}</h2>
+  <ul class="choices">
+    {% for e in entries %}
+    <li><a href="/connections/new/{{ e.id }}"><strong>{{ e.label }}</strong></a>
+      {% if e.description %}<span class="muted">{{ e.description }}</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endfor %}
+{% endblock %}

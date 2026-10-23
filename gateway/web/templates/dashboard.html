@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Hello {{ me.title }}</h1>
+
+<section class="card">
+  <h2>Endpoints</h2>
+  <p class="muted">Point your MCP client at one of these, with a token from <a href="/tokens">Tokens</a> as
+    <code>Authorization: Bearer …</code>.</p>
+  <dl class="endpoints">
+    <dt>All tools, behind four meta tools</dt>
+    <dd><input readonly value="{{ base }}"></dd>
+    {% for name in integrations %}
+    <dt>{{ name }} only</dt>
+    <dd><input readonly value="{{ base }}/{{ name }}"></dd>
+    {% endfor %}
+  </dl>
+</section>
+
+<section class="card">
+  <h2>Connections</h2>
+  {% if not connections %}
+  <p>Nothing connected yet. <a class="button" href="/connections/new">Add a connection</a></p>
+  {% else %}
+  <table>
+    <thead><tr><th>Integration</th><th>Name</th><th>Type</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for c in connections %}
+      {% set info = integrations.get(c.integration) %}
+      <tr>
+        <td>{{ c.integration }}</td>
+        <td><a href="/connections/{{ c.id }}">{{ c.label }}</a> <span class="muted">({{ c.name }})</span></td>
+        <td>{{ catalog.get(c.catalog_id).label if catalog.get(c.catalog_id) else c.catalog_id }}</td>
+        <td>
+          {% if not c.enabled %}<span class="pill off">disabled</span>
+          {% elif not info %}<span class="pill off">off</span>
+          {% elif info.status == "ok" %}<span class="pill ok">ok</span> <span class="muted">{{ info.tools }} tools</span>
+          {% elif info.status == "off" %}<span class="pill off">off</span> <span class="muted">{{ info.reason }}</span>
+          {% else %}<span class="pill error">error</span> <span class="muted">{{ info.error }}</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p><a class="button" href="/connections/new">Add a connection</a></p>
+  {% endif %}
+</section>
+{% endblock %}

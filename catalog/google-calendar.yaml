@@ -1,0 +1,26 @@
+# Google calendars through the Calendar API (scopes: events + calendar list,
+# nothing that changes sharing). Needs the instance's Google OAuth client
+# (admin settings); connected with "Connect with Google" in the web UI.
+id: google-calendar
+label: Google Calendar
+description: Read and plan events in Google calendars. Never invites anyone.
+kind: native
+integration: calendar
+backend: google
+fields:
+  - name: email
+    label: Google account
+    type: email
+  - name: timezone
+    label: Time zone
+    default: Europe/Berlin
+  - name: default_calendar
+    label: Calendar for new events (id or name; default primary)
+    required: false
+oauth:
+  provider: google
+  scopes:
+    - https://www.googleapis.com/auth/calendar.events
+    - https://www.googleapis.com/auth/calendar.calendarlist.readonly
+capabilities:
+  default: [read, write]

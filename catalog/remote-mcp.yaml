@@ -1,0 +1,17 @@
+# Any MCP server reachable over streamable HTTP, optionally with a bearer
+# token. Tools can be switched off per connection in the web UI.
+id: remote-mcp
+label: Other MCP server
+description: Proxy an MCP server that speaks streamable HTTP.
+kind: remote
+integration: remote
+fields:
+  - name: url
+    label: Server URL
+    type: url
+  - name: token
+    label: Bearer token (if the server needs one)
+    type: secret
+    required: false
+headers:
+  Authorization: "Bearer {token}"

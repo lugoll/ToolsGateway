@@ -1,0 +1,24 @@
+# Any CalDAV server (Nextcloud, Radicale, mailbox.org, ...).
+id: caldav-calendar
+label: Other CalDAV calendar
+description: Read and plan events on any CalDAV server. Never invites anyone.
+kind: native
+integration: calendar
+backend: caldav
+fields:
+  - name: url
+    label: CalDAV URL
+    type: url
+  - name: username
+    label: User name
+  - name: password
+    label: Password
+    type: secret
+  - name: timezone
+    label: Time zone
+    default: Europe/Berlin
+  - name: default_calendar
+    label: Calendar for new events (name; default the first one)
+    required: false
+capabilities:
+  default: [read, write]

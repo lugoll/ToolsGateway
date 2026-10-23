@@ -1,6 +1,6 @@
 from email.message import EmailMessage
 
-from scotty_gateway.modules.mail.parse import addresses, build_draft, decode_words, parse_message
+from gateway.connectors.mail.parse import addresses, build_draft, decode_words, parse_message
 
 
 def make(html=False, attach=False) -> bytes:

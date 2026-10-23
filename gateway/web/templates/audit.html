@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Activity · Tools Gateway{% endblock %}
+{% block content %}
+<h1>Activity</h1>
+<form method="get" class="row filters">
+  {% if users %}
+  <label>User <select name="user"><option value="">all</option>
+    {% for u in users %}<option {% if u == who %}selected{% endif %}>{{ u }}</option>{% endfor %}</select></label>
+  {% endif %}
+  <label>Kind <select name="kind"><option value="">all</option>
+    {% for k, label in (("call", "tool calls"), ("change", "changes"), ("admin", "account")) %}
+    <option value="{{ k }}" {% if k == kind %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  <label>Integration <input name="integration" value="{{ integration }}" size="10"></label>
+  <button class="secondary">Filter</button>
+</form>
+<section class="card">
+  {% if not entries %}<p class="muted">Nothing recorded.</p>{% else %}
+  <table class="audit">
+    <thead><tr><th>When (UTC)</th>{% if users %}<th>User</th>{% endif %}<th>What</th><th>Where</th><th>Details</th></tr></thead>
+    <tbody>
+    {% for e in entries %}
+      <tr class="{{ 'error' if not e.ok }} {{ e.kind }}">
+        <td>{{ e.ts[:19].replace("T", " ") }}</td>
+        {% if users %}<td>{{ e.user }}</td>{% endif %}
+        <td><span class="pill {{ e.kind }}">{{ e.kind }}</span> {{ e.action }}</td>
+        <td>{{ e.integration or "" }}{% if e.connection %}/{{ e.connection }}{% endif %}</td>
+        <td class="muted">{% if e.ms is not none %}{{ e.ms }} ms · {% endif %}{% for k, v in e.detail.items() %}{{ k }}: {{ v if v is string else v | join(", ") if v is iterable and v is not mapping else v }}{% if not loop.last %} · {% endif %}{% endfor %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if next_before %}<p><a href="?user={{ who }}&kind={{ kind }}&integration={{ integration }}&before={{ next_before }}">Older →</a></p>{% endif %}
+  {% endif %}
+</section>
+{% endblock %}

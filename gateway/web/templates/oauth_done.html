@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Sign-in · Tools Gateway{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>{{ "Connected" if ok else "Sign-in failed" }}</h1>
+  <p class="flash {{ 'ok' if ok else 'error' }}">{{ message }}</p>
+  <p><a class="button" href="{{ '/connections/' ~ cid if cid else '/' }}">Continue</a></p>
+</section>
+{% endblock %}

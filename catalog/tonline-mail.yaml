@@ -1,0 +1,20 @@
+# t-online Mail over IMAP with the "Passwort für E-Mail-Programme".
+id: tonline-mail
+label: t-online Mail
+description: Read, file and draft mail in a t-online mailbox. Nothing is ever sent.
+kind: native
+integration: mail
+backend: imap
+settings:
+  host: secureimap.t-online.de
+  port: 993
+fields:
+  - name: email
+    label: t-online address
+    type: email
+  - name: password
+    label: Password for mail programs
+    type: secret
+    help: E-Mail Center → Einstellungen → Passwort für E-Mail-Programme
+capabilities:
+  default: [read, mark_read, draft, move]

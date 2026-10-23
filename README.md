@@ -1,134 +1,267 @@
-# scotty-gateway
+# tools-gateway
 
-The MCP gateway in front of each household member's integrations. One container
-per member (`mcp-gateway-<member>`), holding only that member's credentials. It
-replaces 1MCP and the email-mcp sidecar.
+One MCP gateway for a household. An admin creates users. Each user connects
+their own accounts in a small web UI, generates bearer tokens, and points any
+MCP client at their endpoints:
 
-- **Proxied servers** (Todoist, CalDAV, any MCP server): configuration only, as
-  stdio (`npx`, `uvx`, any command) or HTTP entries.
-- **Native modules** (Python, in this package): integrations without a usable
-  upstream server. The first is `mail`: IMAP accounts plus Gmail over the
-  Gmail API with OAuth. It can read, mark, move and draft; nothing sends or
-  permanently deletes, and every change to a mailbox is logged.
-- **Per-domain endpoints** `/mcp/<domain>` (stateless streamable HTTP), a REST
-  endpoint for scripts, health endpoints that do real checks, and a bearer
-  token on everything except `/health/live`.
+- `/mcp/<user>`: four meta tools (`list_integrations`, `search_tools`,
+  `describe_tool`, `call_tool`) that reach every tool of every integration
+- `/mcp/<user>/<integration>`: the plain tools of one integration (`mail`,
+  `calendar`, `todoist`, ...)
 
-Built on [FastMCP](https://gofastmcp.com) (`fastmcp==4.0.10`). The config is
-read at start from two read-only mounts: the member file
-(`config/gateway/<member>.toml`, `SCOTTY_GATEWAY_CONFIG`) and the recipes
-(`connectors/`, `SCOTTY_GATEWAY_CONNECTORS`). No hot reload: restart the
-container after a change.
+Two kinds of connection:
+
+- **Native connectors** (Python, in `gateway/connectors/`), for integrations
+  without a usable upstream server. All accounts of one kind form one tool
+  set, and the connector speaks each provider's protocol:
+  - `mail`: IMAP (iCloud, t-online, any) and the Gmail API
+  - `calendar`: CalDAV (iCloud, any) and the Google Calendar API
+- **Remote MCP servers** (Todoist's hosted server, anything speaking
+  streamable HTTP) are proxied as they are. Static headers or MCP OAuth are
+  supported, and each tool can be switched on or off.
+
+Python only: the gateway starts no processes and there is no Node in the
+image. Built on [FastMCP](https://gofastmcp.com) (`fastmcp==4.0.10`) and
+Starlette. Templates of what can be connected live in the [catalog](catalog/README.md),
+and state lives in one SQLite file.
 
 ## Endpoints
 
 | Path | Auth | What |
 |---|---|---|
-| `/mcp/<domain>` | Bearer | MCP endpoint of one domain (`todoist`, `calendar`, `email`, ...). Stateless: no session ids, so restarts never wedge a client |
-| `/api/v1/tools[?domain=]` | Bearer | `{"tools": [{name, server, tool, domain, description}], "errors": {server: reason}}` |
-| `/api/v1/tool-invocations` | Bearer | `POST {"tool": "<server>/<tool>", "args": {}}` → `{"result": {"content", "isError", "structuredContent"}}` or `{"error"}` (404 unknown, 409 not running, 502 backend failure, 504 timeout) |
-| `/health/live` | none | the process is up (Docker healthcheck) |
-| `/health/ready` | Bearer | per server: real tool listing (cached 30 s), tool counts, errors, name collisions; 503 if a running server fails |
+| `/mcp/<user>` | Bearer | meta tools; stateless streamable HTTP (no session ids, so restarts never wedge a client) |
+| `/mcp/<user>/<integration>` | Bearer | the integration's tools |
+| `/api/v1/<user>/tools[?integration=]` | Bearer | `{"tools": [{integration, name, description, input_schema}], "errors": {integration: reason}}` |
+| `/api/v1/<user>/tool-invocations` | Bearer | `POST {"tool": "<integration>/<tool>", "args": {}}` → `{"result": {"content", "isError", "structuredContent"}}` or `{"error"}` (404 unknown, 409 not running, 502 upstream failure, 504 timeout) |
+| `/api/v1/<user>/status[?fresh=1]` | Bearer | per integration `ok` / `off` (why) / `error`, with tool counts and accounts; 503 if one fails |
+| `/health/live`, `/health/ready` | none | process up; database and catalog usable |
+| everything else | session | the web UI |
 
-## Config (member file + recipes)
+A token opens only its owner's paths: a valid token on another user's path
+gets 403. Tokens are `tgw_…`, shown once, stored as SHA-256, revocable, and a
+user can have several (one per client).
 
-The member file names recipes; each recipe's `[server]` table becomes one
-server named `<recipe name>-<member>`, with the recipe's `domain`. Format of
-both, and how accounts are picked: `connectors/README.md`.
+## Configuration
 
-```toml
-# config/gateway/lukas.toml                  # connectors/todoist/recipe.toml
-member = "lukas"                             name   = "todoist"
-[[connectors]]                               domain = "todoist"
-recipe = "todoist"                           [server]
-[[connectors]]                               type    = "stdio"
-recipe = "mail"                              command = "npx"
-accounts = ["icloud", "gmail"]               args    = ["-y", "@doist/todoist-mcp@13.4.0"]
-                                             [server.env]
-                                             TODOIST_API_KEY = "${TODOIST_API_KEY}"
-```
+The environment holds only what is needed before the database opens
+(`gateway/settings.py`):
 
-The auth token defaults to `${GATEWAY_TOKEN}` (`[auth] token` in the member
-file overrides it). Every recipe's domain is served, an empty endpoint when the
-member uses none of its connectors.
+| Variable | |
+|---|---|
+| `GATEWAY_MASTER_KEY` (or `_FILE`) | 32 random bytes, base64 (`gateway keygen`). Encrypts every stored secret. **Required.** |
+| `GATEWAY_PUBLIC_URL` | how browsers reach the UI, e.g. `https://tools.pi.home` (cookies, cross-site check, OAuth redirect) |
+| `GATEWAY_ADMIN_USER`, `GATEWAY_ADMIN_PASSWORD` | the first admin, created only while no admin exists |
+| `GATEWAY_DATA` | writable directory for `gateway.db` (image: `/data`) |
+| `GATEWAY_CATALOG` | catalog directory (image: `/app/catalog`) |
+| `GATEWAY_AUDIT_DAYS`, `GATEWAY_AUDIT_MAX_ROWS` | audit retention, default 90 days / 100 000 rows |
+| `GATEWAY_MASTER_KEY_OLD` | previous key while rotating |
 
-Every `[server]` table takes `type`, and optionally (`disabled` + `note` come from the member's entry):
-- `allow` (glob list, null = all) and `deny` (globs; deny wins)
-- `namespace` (prefixes the server's tool names on the domain endpoint; needed when two servers of one domain share tool names)
-- `timeout` (seconds per call)
+Everything else (users, connections, secrets, tokens, the Google OAuth client)
+is managed in the web UI and stored in `gateway.db`.
 
-Type-specific keys:
-- `stdio`: `command`, `args`, `env`, `cwd`, `mode`
-- `http`: `url`, `headers`, `mode`
-- `native`: `module`, `config`
+### Secrets
 
-Notes:
-- `${VAR}` is substituted from the container environment. A server with a missing variable is not started and is reported with the reason. The gateway refuses to start without a token of at least 24 characters.
-- A stdio child gets only its `env` plus a short baseline (`HOME`, `PATH`, ...), never the gateway's other variables. It is started once, kept alive and restarted on the next call after it exits.
-- `mode` pins the backend protocol era: `legacy` (the default for stdio) or `auto` (the default for http).
+Passwords, OAuth tokens and the Google client secret are encrypted with
+AES-256-GCM under the master key. Each value is bound to its row, so a
+ciphertext copied elsewhere does not decrypt. A key check makes a wrong or
+missing key fail at start. The UI can set and replace secrets but never shows
+them. Users set their own; an admin may overwrite a user's secret (a forgotten
+app password), and that shows up in the user's activity log.
 
-## Mail module
+To rotate the key, set the new key as `GATEWAY_MASTER_KEY` and the old one as
+`GATEWAY_MASTER_KEY_OLD`, run `gateway rotate-key`, then remove the old key.
+Back up `gateway.db` and the key separately: the database is useless without
+the key, and losing the key means entering every secret again.
 
-The `config` table of a `module = "mail"` server:
+## Web UI
 
-```json
-{"max_body_chars": 20000, "timeout": 20,
- "accounts": {
-   "icloud": {"backend": "imap", "label": "iCloud", "email": "a@icloud.com",
-              "host": "imap.mail.me.com", "port": 993, "username": "a@icloud.com",
-              "password": "${ICLOUD_APP_PASSWORD}"},
-   "gmail":  {"backend": "gmail", "label": "Gmail", "email": "a@gmail.com",
-              "capabilities": ["read", "mark_read", "draft", "move"], "drafts": "any"}}}
-```
+Pages are server-rendered with plain HTML forms and no JavaScript.
 
-- **Tools:** `list_accounts`, `list_mailboxes`, `list_emails`, `search_emails`, `get_email`, `get_thread`, `mark_email`, `move_email`, `save_draft`. Nothing else: there is no code that sends, forwards or permanently deletes, and a test asserts the tool set.
-- **capabilities** (default all): `read`, `mark_read` (the `\Seen` flag or `UNREAD` label), `draft`, `move`.
-- **move_email:** to any existing folder or label, or `archive`. Trash and Spam are allowed and flagged `destination_kind` in the log. IMAP uses MOVE; servers without it (iCloud) get COPY, then `\Deleted` and `UID EXPUNGE` of that one UID (UIDPLUS required, so other messages are never expunged). Gmail moves by labels; Trash goes through `messages.trash` (30 days recoverable).
-- **Action log:** every move, mark and draft is one JSON line in `/data/<server>/actions.jsonl` (account, id, origin, destination, sender, subject; never bodies), rotated at 5 MB × 5, and also in `docker logs`. Trash and Spam moves are logged as warnings.
-- **drafts:** `any` (default) or `reply-only`. Reply-only means drafts are only replies, and only to people already in the original mail.
-- **IMAP:** one connection per call with 20 s socket timeouts. A provider reset fails one call, never the process. Ids are `<mailbox>|<uidvalidity>|<uid>`. Drafts go to the `\Drafts` special-use folder, or `drafts_folder`.
-- **Gmail:** the REST API with scope `gmail.modify`: read, labels and drafts, but no permanent delete and no settings. The scope would allow sending; this code never does. The token lives in `/data/<server>/tokens/<account>.json` (0600).
+- **Overview:** your endpoints, integrations and connections with their status.
+- **Add connection:** pick a catalog entry, fill in its fields.
+- **Connection page:**
+  - settings, write-only secrets and "Test connection" (a real round trip to the provider)
+  - what the agent may do (native capabilities) or which tools are on (remote servers)
+  - "Connect" for OAuth
+  - disable or delete
+- **Tokens:** create (shown once) and revoke.
+- **Activity:** your audit log. Admins see everyone's.
+- **Users** (admin): create, disable, reset password, make admin, delete.
+- **Settings** (admin): the Google OAuth client.
 
-### Authorising a Gmail account
+### Security
 
-One-time Google Cloud setup (per household):
-1. In console.cloud.google.com, create a project and enable the **Gmail API**.
-2. Set up the **OAuth consent screen**: user type External, add the scope `.../auth/gmail.modify`, then **Publish app → In production**. In "Testing", refresh tokens expire after 7 days. The app stays unverified; that is fine for personal use.
-3. Under **Credentials**, create an OAuth client ID of type **Desktop app**. Put its id and secret into `.env` as `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET`.
+- Passwords are hashed with Argon2id.
+- Sessions are server-side behind an HttpOnly, SameSite=Strict cookie, named
+  `__Host-session` (Secure) when the public URL is https. A session ends
+  after 3 idle days, 30 days at most, at logout, and when the password changes
+  or the user is disabled.
+- Every form carries a per-session CSRF token. Every POST must come from the
+  public origin.
+- Logins are throttled per address and per name, with backoff after 5 failures.
+- Response headers: a strict CSP (`default-src 'none'`; no scripts at all),
+  `frame-ancestors 'none'`, nosniff, a referrer policy, and `no-store` on pages.
+- TLS and HSTS come from Caddy (`deploy/Caddyfile`).
 
-Per account (on the Pi, run `ssh -L 8765:localhost:8765 <pi>` first from the machine with the browser):
+## Native connectors
+
+### mail
+
+- **Tools:** `list_accounts`, `list_mailboxes`, `list_emails`, `search_emails`,
+  `get_email`, `get_thread`, `mark_email`, `move_email`, `save_draft`. There is
+  no code that sends, forwards or permanently deletes, and a test asserts the
+  tool set.
+- **Capabilities** (default all): `read`, `mark_read`, `draft`, `move`.
+  `drafts: reply-only` limits drafts to replies to people already in the thread.
+- **move_email:** to any folder or label, or `archive`. Trash and Spam are
+  allowed and flagged in the log.
+  - IMAP uses MOVE. Servers without it (iCloud) get COPY, then `\Deleted` and
+    `UID EXPUNGE` of that one UID (UIDPLUS required).
+  - Gmail moves by labels; Trash goes through `messages.trash`.
+- **IMAP:** one kept connection per account, checked with NOOP before reuse and
+  replaced by one fresh login when the provider has reset it; logged out after
+  5 idle minutes. Ids are `<mailbox>|<uidvalidity>|<uid>`.
+- **Gmail:** the REST API with scope `gmail.modify`, which excludes permanent
+  delete and settings.
+
+### calendar
+
+- **Tools:** `list_accounts`, `list_calendars`, `list_events`, `get_event`,
+  `search_events`, `create_event`, `update_event`, `delete_event`.
+  - Reading can span all accounts at once.
+  - Times are `YYYY-MM-DD` (all day) or `YYYY-MM-DDTHH:MM` in the account's
+    time zone.
+- **Capabilities:** `read`, `write`, `delete` (delete is off by default).
+- **Never sends:** guests cannot be added. Events that have guests are not
+  changed or deleted, because providers email guests on changes. Recurring
+  events are read-only. Google calls pass `sendUpdates=none`.
+- **CalDAV:** iCloud with an app-specific password, or any server. **Google:**
+  the Calendar API with scopes `calendar.events` + `calendar.calendarlist.readonly`.
+
+Every change made through a tool (moved mail, saved draft, created event, ...)
+is an audit entry with what a person needs to find it again.
+
+## OAuth
+
+### Google (Gmail, Google Calendar)
+
+One-time setup per household:
+
+1. In console.cloud.google.com, create a project and enable the **Gmail API**
+   and the **Google Calendar API**.
+2. On the **OAuth consent screen**, add the scopes from the catalog entries
+   (`gmail.modify`, `calendar.events`, `calendar.calendarlist.readonly`), then
+   choose **Publish app → In production**. In "Testing", refresh tokens
+   expire after 7 days.
+3. Under **Credentials**, create an OAuth client of type **Desktop app**.
+4. Enter its id and secret in the gateway under **Settings**.
+
+Google allows redirects only to public domains or loopback, and
+`tools.pi.home` is neither. The UI therefore uses a paste-back step:
+
+1. "Connect with Google" opens the consent page.
+2. Google then sends the browser to `http://localhost/?code=…`, which does not
+   load. That is expected.
+3. You paste that address into the UI.
+
+The gateway saves the token only if Google granted exactly the catalog's
+scopes, returned a refresh token, and the signed-in account is the configured
+address.
+
+### Remote MCP servers (Todoist)
+
+"Connect" runs the MCP authorization flow through the MCP SDK: discovery,
+dynamic client registration, PKCE. The server sends the browser back to
+`<GATEWAY_PUBLIC_URL>/oauth/mcp/callback`. Tokens are stored encrypted per
+connection and refreshed on their own. A server that wants a new sign-in fails
+calls with a hint to connect again.
+
+## Audit log
+
+Each entry is one of:
+
+- a tool call: who, integration, tool, argument **names** (never values),
+  duration, ok
+- a change made through a tool
+- an account action: login, token, connection or secret changes, admin actions
+
+Entries are buffered, written in batches, and pruned to the retention limits
+daily, so the SD card is spared. They are also printed to stdout as JSON
+lines; bound Docker's log size (see `deploy/compose.yaml`).
+
+## Deployment (Raspberry Pi behind Caddy)
+
+`deploy/compose.yaml` and `deploy/Caddyfile` are a complete example:
 
 ```bash
-docker compose run --rm -p 127.0.0.1:8765:8765 mcp-gateway-lukas auth email-lukas gmail
+cd deploy
+docker run --rm ghcr.io/lugoll/tools-gateway:0.3.0 keygen    # -> GATEWAY_MASTER_KEY in .env
+docker compose up -d
 ```
 
-Open the printed URL and sign in as that Gmail address. Google warns that the app is unverified: choose "Advanced", then continue. The command saves the token only if Google granted exactly `gmail.modify` and the signed-in mailbox matches the configured address. No restart is needed: the gateway reads the token on the next call.
+Then open `https://tools.pi.home`, log in as the admin, create the users, and
+let each of them add connections and a token.
 
 ## CLI
 
 ```bash
-scotty-gateway check-config                 # what would run, and why not
-scotty-gateway tools [--domain email]       # in-process listing (starts the backends)
-scotty-gateway call email-lukas/list_emails --args '{"account":"icloud","seen":false}'
-scotty-gateway auth email-lukas gmail       # see above
+gateway serve                       # the container's default command
+gateway check                       # settings, master key, database, catalog, users
+gateway keygen                      # a new master key
+gateway rotate-key                  # see "Secrets"
+gateway reset-password lukas        # prompts; for a locked-out admin
+gateway tools lukas [mail]          # a user's tools, in-process
+gateway call lukas mail/list_emails --args '{"account":"icloud","seen":false}'
 ```
 
-Inside the running container: `docker exec mcp-gateway-lukas scotty-gateway tools`.
+In the container: `docker compose exec tools-gateway gateway check`.
 
-## Adding things
+## Layout
 
-- **A proxied MCP server:** a recipe in `connectors/` with a `[gateway]` table of type `stdio` or `http`. No code.
-- **A native integration:** a package under `src/scotty_gateway/modules/<name>/` exposing `build(config, ctx) -> FastMCP` (and optionally `commands`), registered in `modules/__init__.py`, plus a recipe with `type = "native"`. Secrets reach it through `config` (`${VAR}`).
+```
+gateway/
+  settings.py   app.py   cli.py      environment, wiring, command line
+  catalog/                           loads and validates catalog/*.yaml
+  storage/                           SQLite + migrations, encryption, secrets, connections, audit log
+  auth/                              users + passwords, API tokens, sessions, login throttling
+  mcp/                               per-user runtimes, routing, meta tools, tool filters, audit middleware
+  connectors/                        native integrations: mail/, calendar/
+  outbound/                          leaving the box: remote MCP proxy, oauth/ (Google, MCP)
+  web/                               UI routes, templates, static CSS, HTTP hardening
+catalog/                             what users can connect (format: catalog/README.md)
+deploy/                              example compose file and Caddyfile
+tests/
+```
+
+Adding things:
+
+- **A remote MCP server:** a catalog entry with `kind: remote`. No code.
+- **A provider for an existing integration** (another IMAP host): a catalog
+  entry with `kind: native`.
+- **A new native integration:** a package in `gateway/connectors/<name>/`
+  exposing `INTEGRATION`, `BACKENDS`, `CAPABILITIES`, `CHECK` and
+  `build(accounts, ctx) -> FastMCP`, registered in `gateway/connectors/__init__.py`,
+  with tests, plus catalog entries.
 
 ## Development
 
 ```bash
-uv sync && uv run pytest                     # unit tests; IMAP tests skip without a server
-docker run -d --rm --name scotty-greenmail \
+uv sync && uv run pytest              # CalDAV tests run against an in-process Radicale; IMAP tests skip
+docker run -d --rm --name gateway-greenmail \
   -e GREENMAIL_OPTS='-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.auth.disabled' \
   -p 127.0.0.1:3025:3025 -p 127.0.0.1:3143:3143 greenmail/standalone:2.1.14
-SCOTTY_TEST_IMAP=127.0.0.1:3143 SCOTTY_TEST_SMTP=127.0.0.1:3025 uv run pytest
-docker build -t scotty-gateway:dev .         # local test image
+GATEWAY_TEST_IMAP=127.0.0.1:3143 GATEWAY_TEST_SMTP=127.0.0.1:3025 uv run pytest
+docker build -t tools-gateway:dev .
 ```
 
-Releases: push a tag `gateway-vX.Y.Z`. CI runs the tests, builds `linux/amd64` + `linux/arm64` and pushes `ghcr.io/lugoll/scotty-gateway:X.Y.Z`. Then bump the tag in `docker-compose.yml` (`x-gateway`).
+To run it locally:
+
+```bash
+GATEWAY_MASTER_KEY=$(uv run gateway keygen) GATEWAY_ADMIN_USER=admin GATEWAY_ADMIN_PASSWORD=change-me-now \
+  uv run gateway serve
+```
+
+Then open http://localhost:3050.
+
+Releases: push a tag `vX.Y.Z`. CI runs the tests, builds `linux/amd64` and
+`linux/arm64`, and pushes `ghcr.io/lugoll/tools-gateway:X.Y.Z`.

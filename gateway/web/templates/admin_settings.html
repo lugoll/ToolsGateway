@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Settings · Tools Gateway{% endblock %}
+{% block content %}
+<h1>Instance settings</h1>
+<section class="card narrow">
+  <h2>Google OAuth client</h2>
+  <p class="muted">Used by every Gmail and Google Calendar connection. Create a client of type
+    <em>Desktop app</em> in a Google Cloud project (APIs: Gmail, Google Calendar) and publish its consent
+    screen "In production" (in "Testing", tokens expire after 7 days).</p>
+  {% for name, label in names.items() %}
+  <form method="post" class="secret">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="name" value="{{ name }}">
+    <label>{{ label }}
+      <input name="value" type="password" autocomplete="off" placeholder="{{ 'set ' ~ stored[name].updated[:10] ~ ' by ' ~ stored[name].updated_by if name in stored else 'not set' }}">
+    </label>
+    <button>Save</button>
+    {% if name in stored %}<button name="clear" value="1" class="secondary">Remove</button>{% endif %}
+  </form>
+  {% endfor %}
+</section>
+<section class="card narrow">
+  <h2>Remote MCP servers with OAuth</h2>
+  <p class="muted">The gateway registers itself with such servers; their sign-in returns to
+    <code>{{ redirect_uri }}</code> (from GATEWAY_PUBLIC_URL).</p>
+</section>
+{% endblock %}

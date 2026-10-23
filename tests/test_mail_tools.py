@@ -2,9 +2,9 @@
 import pytest
 from fastmcp.exceptions import ToolError
 
-from scotty_gateway.modules import ModuleContext
-from scotty_gateway.modules.mail import build, tools
-from scotty_gateway.modules.mail.parse import parse_message
+from gateway.connectors import AccountRuntime, ConnectorContext
+from gateway.connectors.mail import build, tools
+from gateway.connectors.mail.parse import parse_message
 from test_mail_parse import make
 
 FORBIDDEN = ("send", "forward", "delete", "trash", "expunge", "schedule")
@@ -44,15 +44,26 @@ class FakeBackend:
         return {"folder": "Drafts"}
 
 
+def account(name, caps=("read", "mark_read", "draft", "move"), **values):
+    return AccountRuntime(name=name, label=name, backend="imap",
+                          values={"email": "me@example.com", "host": "h", **values},
+                          secrets={"password": "p"}, capabilities=set(caps))
+
+
 @pytest.fixture
-def server(monkeypatch, tmp_path):
+def changes():
+    return []
+
+
+@pytest.fixture
+def server(monkeypatch, changes):
     monkeypatch.setattr(tools, "make_backend", lambda acc, cfg, ctx: FakeBackend(acc))
-    cfg = {"accounts": {
-        "open": {"backend": "imap", "email": "me@example.com", "host": "h", "username": "u", "password": "p"},
-        "strict": {"backend": "imap", "email": "me@example.com", "host": "h", "username": "u", "password": "p",
-                   "capabilities": ["read", "draft"], "drafts": "reply-only"}}}
     import logging
-    return build(cfg, ModuleContext("email-t", "t", tmp_path, logging.getLogger("t")))
+    ctx = ConnectorContext("t", "mail", logging.getLogger("t"),
+                           record_change=lambda acc, action, fields: changes.append((acc, action, fields)))
+    return build([account("open"), account("strict", ("read", "draft"), drafts="reply-only"),
+                  AccountRuntime(name="nopw", label="x", backend="imap", values={"email": "a@b.c", "host": "h"},
+                                 secrets={}, capabilities={"read"})], ctx)
 
 
 async def call(server, tool, **args):
@@ -63,8 +74,8 @@ async def test_exact_tool_set_nothing_destructive(server):
     names = {t.name for t in await server.list_tools()}
     assert names == set(tools.TOOLS)
     assert not [n for n in names if any(word in n for word in FORBIDDEN)]
-    from scotty_gateway.modules.mail.gmail_backend import GmailBackend
-    from scotty_gateway.modules.mail.imap_backend import ImapBackend
+    from gateway.connectors.mail.gmail import GmailBackend
+    from gateway.connectors.mail.imap import ImapBackend
     for cls in (ImapBackend, GmailBackend):          # the real backends have no such method either
         assert not [m for m in dir(cls) if any(word in m.lower() for word in FORBIDDEN)]
 
@@ -107,12 +118,20 @@ async def test_move_needs_capability(server):
     assert out["moved"] and out["to"] == "Archive" and out["destination_kind"] is None
 
 
-async def test_every_change_is_in_the_action_log(server, tmp_path):
-    import json
+async def test_every_change_is_recorded(server, changes):
     await call(server, "move_email", account="open", id="INBOX|1|7", to="Trash")
     await call(server, "mark_email", account="open", id="INBOX|1|7", action="unread")
     await call(server, "save_draft", account="open", to="a@b.org", subject="S", body="secret body text")
-    lines = [json.loads(line) for line in (tmp_path / "actions.jsonl").read_text().splitlines()]
-    assert [e["action"] for e in lines] == ["move", "mark_unread", "save_draft"]
-    assert lines[0]["destination_kind"] == "trash" and lines[0]["subject"] == "Grüße" and lines[0]["to"] == "Trash"
-    assert "secret body text" not in (tmp_path / "actions.jsonl").read_text()
+    assert [(acc, action) for acc, action, _ in changes] == [("open", "move"), ("open", "mark_unread"),
+                                                              ("open", "save_draft")]
+    move = changes[0][2]
+    assert move["destination_kind"] == "trash" and move["subject"] == "Grüße" and move["to"] == "Trash"
+    assert "secret body text" not in str(changes)
+
+
+async def test_broken_account_is_listed_not_fatal(server):
+    accounts = {a["account"]: a for a in (await call(server, "list_accounts"))["accounts"]}
+    assert accounts["nopw"]["status"] == "not usable: account nopw: no password set"
+    assert accounts["open"]["allows"] == ["draft", "mark_read", "move", "read"]
+    with pytest.raises(ToolError, match="not usable"):
+        await call(server, "list_emails", account="nopw")

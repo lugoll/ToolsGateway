@@ -1,0 +1,18 @@
+# Test-only: the fake remote MCP server of tests/fake_remote.py.
+id: fake-remote
+label: Fake remote
+kind: remote
+integration: tasks
+fields:
+  - name: url
+    label: URL
+    type: url
+  - name: token
+    label: Token
+    type: secret
+headers:
+  Authorization: "Bearer {token}"
+tools:
+  deny: ["delete_*"]
+  forbid: ["send_*"]
+timeout: 10

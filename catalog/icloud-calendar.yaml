@@ -1,0 +1,26 @@
+# iCloud calendars over CalDAV with an app-specific password.
+id: icloud-calendar
+label: iCloud Calendar
+description: Read and plan events in iCloud calendars. Never invites anyone.
+kind: native
+integration: calendar
+backend: caldav
+settings:
+  url: https://caldav.icloud.com/
+  auth_type: basic          # skip the unauthenticated probe: one round trip less per call
+fields:
+  - name: username
+    label: Apple ID (mail address)
+    type: email
+  - name: password
+    label: App-specific password
+    type: secret
+    help: appleid.apple.com → Sign-In and Security → App-Specific Passwords
+  - name: timezone
+    label: Time zone
+    default: Europe/Berlin
+  - name: default_calendar
+    label: Calendar for new events (name; default the first one)
+    required: false
+capabilities:
+  default: [read, write]

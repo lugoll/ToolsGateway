@@ -1,7 +1,7 @@
 [project]
-name = "scotty-gateway"
-version = "0.2.0"
-description = "Scotty2's per-member MCP gateway: proxies configured MCP servers and hosts native modules (mail)"
+name = "tools-gateway"
+version = "0.3.0"
+description = "Multi-user MCP gateway: proxies remote MCP servers and hosts native connectors (mail, calendar), configured through a small web UI"
 requires-python = ">=3.12"
 license = "Apache-2.0"
 dependencies = [
@@ -10,24 +10,30 @@ dependencies = [
     "imapclient==4.1.0",
     "inscriptis==2.7.5",
     "google-auth==2.59.1",
-    "google-auth-oauthlib==1.5.0",
     "requests>=2.32",
+    "pyyaml>=6.0",
+    "cryptography>=44",
+    "argon2-cffi>=23.1",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.20",
+    "caldav>=1.4",
+    "niquests>=3.21",
 ]
 
 [project.scripts]
-scotty-gateway = "scotty_gateway.cli:main"
+gateway = "gateway.cli:main"
 
 [dependency-groups]
-dev = ["pytest==9.1.1", "pytest-asyncio>=1.0", "httpx>=0.28"]
+dev = ["pytest==9.1.1", "pytest-asyncio>=1.0", "httpx>=0.28", "radicale>=3.2"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/scotty_gateway"]
+packages = ["gateway"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-markers = ["imap: needs a GreenMail container (SCOTTY_TEST_IMAP=host:port)"]
+markers = ["imap: needs a GreenMail container (GATEWAY_TEST_IMAP=host:port)"]

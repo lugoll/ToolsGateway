@@ -1,0 +1,29 @@
+# Any IMAP mailbox (TLS on 993 unless changed).
+id: imap-mail
+label: Other IMAP mailbox
+description: Any provider that offers IMAP with an (app) password. Nothing is ever sent.
+kind: native
+integration: mail
+backend: imap
+fields:
+  - name: email
+    label: Mail address
+    type: email
+  - name: host
+    label: IMAP server
+  - name: port
+    label: Port
+    type: number
+    default: 993
+  - name: tls
+    label: TLS (IMAPS)
+    type: bool
+    default: true
+  - name: username
+    label: User name (if not the address)
+    required: false
+  - name: password
+    label: Password
+    type: secret
+capabilities:
+  default: [read, mark_read, draft, move]

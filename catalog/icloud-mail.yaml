@@ -1,0 +1,20 @@
+# iCloud Mail over IMAP with an app-specific password.
+id: icloud-mail
+label: iCloud Mail
+description: Read, file and draft mail in an iCloud mailbox. Nothing is ever sent.
+kind: native
+integration: mail
+backend: imap
+settings:
+  host: imap.mail.me.com
+  port: 993
+fields:
+  - name: email
+    label: Apple ID (mail address)
+    type: email
+  - name: password
+    label: App-specific password
+    type: secret
+    help: appleid.apple.com → Sign-In and Security → App-Specific Passwords
+capabilities:
+  default: [read, mark_read, draft, move]

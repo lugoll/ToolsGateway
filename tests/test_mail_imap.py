@@ -1,9 +1,9 @@
 """IMAP backend against a real server. Needs GreenMail:
 
-    docker run -d --rm --name scotty-greenmail \
+    docker run -d --rm --name gateway-greenmail \
       -e GREENMAIL_OPTS='-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.auth.disabled' \
       -p 127.0.0.1:3025:3025 -p 127.0.0.1:3143:3143 greenmail/standalone:2.1.14
-    SCOTTY_TEST_IMAP=127.0.0.1:3143 SCOTTY_TEST_SMTP=127.0.0.1:3025 uv run pytest -m imap
+    GATEWAY_TEST_IMAP=127.0.0.1:3143 GATEWAY_TEST_SMTP=127.0.0.1:3025 uv run pytest -m imap
 """
 import os
 import smtplib
@@ -13,13 +13,13 @@ from email.message import EmailMessage
 import pytest
 from imapclient import IMAPClient
 
-from scotty_gateway.modules.mail.config import Account, MailError
-from scotty_gateway.modules.mail.imap_backend import ImapBackend
-from scotty_gateway.modules.mail.parse import build_draft
+from gateway.connectors.mail.config import Account, MailError
+from gateway.connectors.mail.imap import ImapBackend
+from gateway.connectors.mail.parse import build_draft
 
-IMAP = os.environ.get("SCOTTY_TEST_IMAP")
-SMTP = os.environ.get("SCOTTY_TEST_SMTP")
-pytestmark = [pytest.mark.imap, pytest.mark.skipif(not (IMAP and SMTP), reason="SCOTTY_TEST_IMAP/SMTP unset")]
+IMAP = os.environ.get("GATEWAY_TEST_IMAP")
+SMTP = os.environ.get("GATEWAY_TEST_SMTP")
+pytestmark = [pytest.mark.imap, pytest.mark.skipif(not (IMAP and SMTP), reason="GATEWAY_TEST_IMAP/SMTP unset")]
 
 
 def deliver(user, subject, body, msg_id, references=None):
@@ -112,36 +112,19 @@ def test_unreachable_server_is_an_error_not_a_crash(backend):
         backend.list("INBOX", None, None, None, None, 5, 1)
 
 
-def test_through_gateway_and_gate_parser(backend, env):
-    """Native module behind the gateway's REST endpoint, read the way the gate scripts read it."""
-    import asyncio
-    import importlib.util
-    import sys
-    import json
-    from pathlib import Path
-
-    from scotty_gateway.app import Gateway
-    from scotty_gateway.config import load
-    from conftest import write_config
-
+async def test_through_gateway(backend, services):
+    """The IMAP account as a connection of a user, called through the runtime's REST shape."""
     acc = backend.acc
-    cfg = load(write_config(env, {"email-tester": {"domain": "email", "type": "native", "module": "mail",
-        "config": {"accounts": {"test": {"backend": "imap", "email": acc.email, "host": acc.host,
-                                          "port": acc.port, "username": acc.username,
-                                          "password": "${FAKE_SECRET}", "tls": False}}}}}))
-    gw = Gateway(cfg)
-    status, body = asyncio.run(gw.invoke("email-tester", "list_emails", {"account": "test", "seen": False}))
+    user = services.users.create("tester", "tester-password")
+    services.connections.create(user.id, services.catalog.get("imap-mail"), "test", "Test",
+                                {"email": acc.email, "host": acc.host, "port": acc.port, "tls": False},
+                                {"password": "pw"}, by="tester")
+    runtime = services.registry.build(user)
+    status, body = await runtime.invoke("mail", "list_emails", {"account": "test", "seen": False})
     assert status == 200 and not body["result"]["isError"]
-
-    gate = Path(__file__).resolve().parents[3] / "gates/_gateway.py"
-    sys.dont_write_bytecode = True        # do not leave __pycache__ in gates/
-    spec = importlib.util.spec_from_file_location("gate_gateway", gate)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    text = body["result"]["content"][0]["text"]
-    items = mod.parse_email_list(json.loads(text))
-    assert len(items) == 3 and all(i["unread"] and "|" in i["id"] for i in items)
-    assert items[0]["subject"] == "Re: Rechnung Oktober"
+    emails = body["result"]["structuredContent"]["emails"]
+    assert len(emails) == 3 and all(e["unread"] and "|" in e["id"] for e in emails)
+    assert emails[0]["subject"] == "Re: Rechnung Oktober"
 
 
 def test_move(backend):
@@ -198,3 +181,66 @@ def _has_capability(backend, cap) -> bool:
     with IMAPClient(backend.acc.host, port=backend.acc.port, ssl=False) as c:
         c.login(backend.acc.username, "pw")
         return c.has_capability(cap)
+
+
+# ------------------------------------------------------- kept connection
+@pytest.fixture
+def logins(monkeypatch):
+    count = []
+    real = IMAPClient.login
+    monkeypatch.setattr(IMAPClient, "login", lambda self, *a: (count.append(1), real(self, *a))[1])
+    return count
+
+
+def reset(backend) -> None:
+    """What a provider closing an idle connection looks like to us."""
+    import socket
+    backend._conn.socket().shutdown(socket.SHUT_RDWR)
+
+
+def inbox_total(backend) -> int:
+    return backend.list("INBOX", None, None, None, None, 5, 1)["total"]
+
+
+def test_connection_is_kept_and_checked(backend, logins):
+    assert [inbox_total(backend) for _ in range(3)] == [3, 3, 3] and len(logins) == 1
+
+
+def test_connection_reset_by_the_provider_is_replaced(backend, logins):
+    inbox_total(backend)
+    reset(backend)
+    assert inbox_total(backend) == 3 and len(logins) == 2
+
+
+def test_failed_reconnect_is_an_error(backend):
+    inbox_total(backend)
+    reset(backend)
+    backend.acc.port = 1
+    with pytest.raises(MailError, match="cannot reach"):
+        inbox_total(backend)
+
+
+def test_failure_during_a_call_drops_the_connection(backend, logins, monkeypatch):
+    inbox_total(backend)
+    monkeypatch.setattr(backend._conn, "search", lambda *a, **k: (_ for _ in ()).throw(OSError("reset")))
+    with pytest.raises(OSError):
+        inbox_total(backend)
+    assert backend._conn is None
+    assert inbox_total(backend) == 3 and len(logins) == 2
+
+
+def test_parallel_calls_share_one_connection_in_turn(backend, logins):
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(4) as pool:
+        assert list(pool.map(lambda _: inbox_total(backend), range(8))) == [3] * 8
+    assert len(logins) == 1
+
+
+def test_idle_connection_is_logged_out(backend, monkeypatch):
+    import time
+    from gateway.connectors.mail import imap
+    monkeypatch.setattr(imap, "IDLE_CLOSE", 0.2)
+    inbox_total(backend)
+    time.sleep(0.6)
+    assert backend._conn is None
+    assert inbox_total(backend) == 3

@@ -1,0 +1,13 @@
+# Todoist through Doist's hosted MCP server (streamable HTTP, OAuth per user).
+# "Connect" in the web UI signs the user in; the gateway registers itself with
+# Todoist's authorization server on first use.
+id: todoist
+label: Todoist
+description: Tasks and projects in Todoist, through the official hosted MCP server.
+kind: remote
+integration: todoist
+url: https://ai.todoist.net/mcp
+oauth:
+  provider: mcp
+tools:
+  deny: ["delete*"]

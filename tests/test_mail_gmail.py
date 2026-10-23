@@ -4,9 +4,9 @@ import json
 
 import pytest
 
-from scotty_gateway.modules.mail.config import Account, MailError
-from scotty_gateway.modules.mail.gmail_backend import GmailBackend, NeedsAuth
-from scotty_gateway.modules.mail.parse import build_draft
+from gateway.connectors.mail.config import Account, MailError
+from gateway.connectors.mail.gmail import GmailBackend, NeedsAuth
+from gateway.connectors.mail.parse import build_draft
 from test_mail_parse import make
 
 
@@ -54,10 +54,9 @@ class FakeSession:
 
 
 @pytest.fixture
-def gmail(tmp_path):
-    acc = Account(name="gmail", backend="gmail", label="Gmail", email="me@gmail.com",
-                  token_file=tmp_path / "gmail.json")
-    b = GmailBackend(acc, 10, 1000, "email-t")
+def gmail():
+    acc = Account(name="gmail", backend="gmail", label="Gmail", email="me@gmail.com", token=None)
+    b = GmailBackend(acc, 10, 1000, lambda account: f"connect {account} in the UI")
     b._session = FakeSession()
     return b
 
@@ -83,14 +82,14 @@ def test_mark_and_draft(gmail):
     assert gmail._session.calls[-1][3]["message"]["threadId"] == "t1"
 
 
-def test_errors(gmail, tmp_path):
+def test_errors(gmail):
     with pytest.raises(MailError, match="not found"):
         gmail.get("gone")
-    with pytest.raises(NeedsAuth, match="scotty-gateway auth email-t gmail"):
+    with pytest.raises(NeedsAuth, match="connect gmail in the UI"):
         gmail.get("expired")
-    fresh = GmailBackend(gmail.acc, 10, 1000, "email-t")
+    fresh = GmailBackend(gmail.acc, 10, 1000)
     with pytest.raises(NeedsAuth):
-        fresh.mailboxes()          # no token file yet
+        fresh.mailboxes()          # no token yet
 
 
 def test_unknown_label(gmail):

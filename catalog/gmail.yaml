@@ -1,0 +1,18 @@
+# Gmail through the Gmail API (scope gmail.modify: no permanent delete, no
+# settings). Needs the instance's Google OAuth client (admin settings); the
+# account is connected with "Connect with Google" in the web UI.
+id: gmail
+label: Gmail
+description: Read, label and draft mail in a Gmail account. Nothing is ever sent.
+kind: native
+integration: mail
+backend: gmail
+fields:
+  - name: email
+    label: Gmail address
+    type: email
+oauth:
+  provider: google
+  scopes: [https://www.googleapis.com/auth/gmail.modify]
+capabilities:
+  default: [read, mark_read, draft, move]

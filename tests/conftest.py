@@ -1,6 +1,5 @@
-import json
+import shutil
 import socket
-import sys
 import threading
 import time
 from pathlib import Path
@@ -8,64 +7,11 @@ from pathlib import Path
 import pytest
 import uvicorn
 
+from gateway.app import Services
+from gateway.settings import REPO_CATALOG, Settings, parse_key
+from gateway.storage.crypto import generate_key
+
 HERE = Path(__file__).parent
-TOKEN = "t" * 32
-
-
-def toml_value(v) -> str:
-    """Enough TOML for test recipes: strings, numbers, bools, lists, inline tables."""
-    if isinstance(v, dict):
-        return "{" + ", ".join(f"{json.dumps(k)} = {toml_value(x)}" for k, x in v.items()) + "}"
-    if isinstance(v, list):
-        return "[" + ", ".join(toml_value(x) for x in v) + "]"
-    return json.dumps(v)
-
-
-def write_recipe(cdir: Path, rid: str, domain: str, server: dict, accounts: dict | None = None) -> None:
-    lines = [f'name = "{rid}"', f'domain = "{domain}"', "[server]"]
-    lines += [f"{k} = {toml_value(v)}" for k, v in server.items()]
-    for acc, table in (accounts or {}).items():
-        lines.append(f"[accounts.{acc}]")
-        lines += [f"{k} = {toml_value(v)}" for k, v in table.items()]
-    (cdir / rid).mkdir(parents=True, exist_ok=True)
-    (cdir / rid / "recipe.toml").write_text("\n".join(lines) + "\n")
-
-
-def write_config(tmp_path: Path, servers: dict, member: str = "tester", entries: list | None = None) -> Path:
-    """One recipe per server (key "<recipe>-<member>", `disabled`/`note` go to the
-    member's entry), the member file listing them, SCOTTY_GATEWAY_CONNECTORS set
-    by the `env` fixture. Returns the member file."""
-    cdir = tmp_path / "connectors"
-    cdir.mkdir(exist_ok=True)
-    out = [f'member = "{member}"', '[auth]', 'token = "${GW_TOKEN}"']
-    for name, spec in servers.items():
-        rid = name.removesuffix(f"-{member}")
-        spec = dict(spec)
-        entry = {"recipe": rid, **{k: spec.pop(k) for k in ("disabled", "note") if k in spec}}
-        write_recipe(cdir, rid, spec.pop("domain"), spec)
-        out += ["[[connectors]]"] + [f"{k} = {toml_value(v)}" for k, v in entry.items()]
-    for entry in entries or []:
-        out += ["[[connectors]]"] + [f"{k} = {toml_value(v)}" for k, v in entry.items()]
-    path = tmp_path / f"{member}.toml"
-    path.write_text("\n".join(out) + "\n")
-    return path
-
-
-def fake_stdio(tmp_path: Path, **extra) -> dict:
-    return {"domain": "tasks", "type": "stdio", "command": sys.executable,
-            "args": [str(HERE / "fake_backend.py")],
-            "env": {"SPAWN_LOG": str(tmp_path / "spawn.log"), "FAKE_SECRET": "${FAKE_SECRET}"}, **extra}
-
-
-@pytest.fixture
-def env(monkeypatch, tmp_path):
-    monkeypatch.setenv("GW_TOKEN", TOKEN)
-    monkeypatch.setenv("FAKE_SECRET", "s3cret")
-    monkeypatch.setenv("GATEWAY_LEAK", "must-not-reach-children")
-    monkeypatch.setenv("SCOTTY_GATEWAY_DATA", str(tmp_path / "data"))
-    monkeypatch.setenv("SCOTTY_GATEWAY_CONNECTORS", str(tmp_path / "connectors"))
-    (tmp_path / "connectors").mkdir()
-    return tmp_path
 
 
 def free_port() -> int:
@@ -76,12 +22,13 @@ def free_port() -> int:
 
 @pytest.fixture
 def serve():
-    """Run an ASGI app on a free port in a thread; yields the base URL."""
+    """Run an ASGI app on a free port in a thread; yields a function returning the base URL."""
     servers = []
 
-    def start(app):
-        port = free_port()
-        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    def start(app, port: int | None = None):
+        port = port or free_port()
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning",
+                                               lifespan="on"))
         thread = threading.Thread(target=server.run, daemon=True)
         thread.start()
         for _ in range(200):
@@ -95,3 +42,27 @@ def serve():
     for server, thread in servers:
         server.should_exit = True
         thread.join(timeout=10)
+
+
+@pytest.fixture
+def catalog_dir(tmp_path) -> Path:
+    """The repo catalog plus test-only entries from tests/catalog."""
+    target = tmp_path / "catalog"
+    shutil.copytree(REPO_CATALOG, target)
+    for extra in (HERE / "catalog").glob("*.yaml"):
+        shutil.copy(extra, target / extra.name)
+    return target
+
+
+@pytest.fixture
+def settings(tmp_path, catalog_dir) -> Settings:
+    return Settings(master_key=parse_key(generate_key(), "test"), master_key_old=None,
+                    data_dir=tmp_path / "data", catalog_dir=catalog_dir, public_url="https://tools.test",
+                    admin_user="admin", admin_password="admin-password-1")
+
+
+@pytest.fixture
+def services(settings) -> Services:
+    s = Services.open(settings)
+    yield s
+    s.db.close()

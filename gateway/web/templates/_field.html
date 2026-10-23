@@ -1,0 +1,13 @@
+{# One catalog field as a form input. `f` = FieldSpec, `value` = current value (never for secrets). #}
+{% if f.type == "bool" %}
+<label class="check"><input type="checkbox" name="{{ f.name }}" {% if value in (true, "on", "true", "1") or (value is none and f.default) %}checked{% endif %}> {{ f.label }}</label>
+{% else %}
+<label>{{ f.label }}{% if not f.required %} <span class="muted">(optional)</span>{% endif %}
+  <input name="{{ f.name }}"
+    type="{{ {'secret': 'password', 'email': 'email', 'url': 'url', 'number': 'number'}.get(f.type, 'text') }}"
+    {% if not f.secret %}value="{{ value if value is not none else (f.default if f.default is not none else '') }}"{% endif %}
+    {% if f.secret %}autocomplete="new-password"{% endif %}
+    {% if f.required and (not f.secret or required_secret) %}required{% endif %}>
+  {% if f.help %}<small class="muted">{{ f.help }}</small>{% endif %}
+</label>
+{% endif %}

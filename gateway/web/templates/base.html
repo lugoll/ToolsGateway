@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Tools Gateway{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">Tools Gateway</a>
+  {% if me %}
+  <nav>
+    <a href="/">Overview</a>
+    <a href="/connections/new">Add connection</a>
+    <a href="/tokens">Tokens</a>
+    <a href="/audit">Activity</a>
+    {% if me.is_admin %}<a href="/admin/users">Users</a><a href="/admin/settings">Settings</a>{% endif %}
+  </nav>
+  <div class="who">
+    <a href="/account">{{ me.title }}</a>
+    <form method="post" action="/logout" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="link">Log out</button>
+    </form>
+  </div>
+  {% endif %}
+</header>
+<main>
+  {% for kind, message in flashes %}<p class="flash {{ kind }}">{{ message }}</p>{% endfor %}
+  {% if error %}<p class="flash error">{{ error }}</p>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

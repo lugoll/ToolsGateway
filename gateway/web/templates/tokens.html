@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Tokens · Tools Gateway{% endblock %}
+{% block content %}
+<h1>API tokens</h1>
+{% if created %}
+<section class="card highlight">
+  <h2>New token</h2>
+  <p>Copy it now: it is shown only once.</p>
+  <input readonly class="token" value="{{ created }}">
+  <p class="muted">Use it as <code>Authorization: Bearer {{ created[:10] }}…</code> for <code>{{ base }}</code>.</p>
+</section>
+{% endif %}
+<section class="card">
+  <h2>Create a token</h2>
+  <form method="post" class="row">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="action" value="create">
+    <label>For which client <input name="label" placeholder="e.g. hermes, laptop" maxlength="60" required></label>
+    <button>Create</button>
+  </form>
+</section>
+<section class="card">
+  <h2>Your tokens</h2>
+  {% if not tokens %}<p class="muted">None yet.</p>{% else %}
+  <table>
+    <thead><tr><th>Client</th><th>Starts with</th><th>Created</th><th>Last used</th><th></th></tr></thead>
+    <tbody>
+    {% for t in tokens %}
+      <tr class="{{ 'off' if t.revoked }}">
+        <td>{{ t.label }}</td><td><code>{{ t.prefix }}…</code></td><td>{{ t.created[:10] }}</td>
+        <td>{{ t.last_used[:16].replace("T", " ") if t.last_used else "never" }}</td>
+        <td>{% if t.revoked %}revoked {{ t.revoked[:10] }}{% else %}
+          <form method="post" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="action" value="revoke">
+            <input type="hidden" name="id" value="{{ t.id }}">
+            <button class="secondary">Revoke</button>
+          </form>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}

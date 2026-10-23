@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}{{ c.label }} · Tools Gateway{% endblock %}
+{% block content %}
+<p><a href="{{ '/' if owner else '/admin/users/' ~ owner_user.name }}">← Back</a></p>
+<h1>{{ c.label }} <span class="muted">{{ c.integration }}/{{ c.name }}</span></h1>
+{% if not owner %}<p class="flash warn">This connection belongs to {{ owner_user.title }}. As admin you can only replace its secrets.</p>{% endif %}
+{% if not entry %}<p class="flash error">Its catalog entry ({{ c.catalog_id }}) no longer exists; the connection cannot run.</p>{% endif %}
+
+{% if owner %}
+<section class="card">
+  <h2>Status</h2>
+  <p>{% if c.enabled %}<span class="pill ok">enabled</span>{% else %}<span class="pill off">disabled</span>{% endif %}
+     Endpoint: <code>{{ endpoint }}</code></p>
+  <div class="row">
+    <form method="post" action="/connections/{{ c.id }}/test"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Test connection</button></form>
+    <form method="post" action="/connections/{{ c.id }}/enable"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary">{{ "Disable" if c.enabled else "Enable" }}</button></form>
+    {% if entry and entry.oauth %}<a class="button" href="/oauth/{{ entry.oauth.provider }}/start/{{ c.id }}">{{ "Reconnect" if "oauth_token" in secrets else "Connect" }} with {{ "Google" if entry.oauth.provider == "google" else "the server" }}</a>{% endif %}
+  </div>
+  {% if entry and entry.oauth %}<p class="muted">{% if "oauth_token" in secrets %}Authorised {{ secrets.oauth_token.updated[:10] }}.{% else %}Not authorised yet.{% endif %}</p>{% endif %}
+</section>
+
+{% if entry %}
+<section class="card">
+  <h2>Settings</h2>
+  <form method="post" action="/connections/{{ c.id }}/settings">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Label <input name="label" value="{{ c.label }}"></label>
+    {% for f in entry.fields if not f.secret %}
+      {% set value = c.settings.get(f.name) %}
+      {% include "_field.html" %}
+    {% endfor %}
+    {% for k, v in entry.settings.items() %}<p class="muted">{{ k }}: {{ v }}</p>{% endfor %}
+    <button>Save</button>
+  </form>
+</section>
+{% endif %}
+{% endif %}
+
+{% if entry and entry.secret_fields %}
+<section class="card">
+  <h2>Secrets</h2>
+  <p class="muted">Stored encrypted. They can be replaced, never shown.</p>
+  {% for f in entry.secret_fields %}
+  <form method="post" action="/connections/{{ c.id }}/secret" class="secret">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="name" value="{{ f.name }}">
+    <label>{{ f.label }}
+      <input name="value" type="password" autocomplete="new-password" placeholder="{{ 'set ' ~ secrets[f.name].updated[:10] ~ ' by ' ~ secrets[f.name].updated_by if f.name in secrets else 'not set' }}">
+      {% if f.help %}<small class="muted">{{ f.help }}</small>{% endif %}
+    </label>
+    <button>Replace</button>
+    {% if owner and f.name in secrets and not f.required %}<button name="clear" value="1" class="secondary">Remove</button>{% endif %}
+  </form>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if owner and capabilities %}
+<section class="card">
+  <h2>What the agent may do</h2>
+  <form method="post" action="/connections/{{ c.id }}/capabilities">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% for cap, on in capabilities %}
+    <label class="check"><input type="checkbox" name="cap_{{ cap }}" {% if on %}checked{% endif %}> {{ cap.replace("_", " ") }}</label>
+    {% endfor %}
+    <button>Save</button>
+  </form>
+</section>
+{% endif %}
+
+{% if owner and entry and entry.kind == "remote" %}
+<section class="card">
+  <h2>Tools</h2>
+  {% if tools_error %}<p class="flash error">Cannot list the server's tools: {{ tools_error }}</p>{% endif %}
+  {% if tools %}
+  <form method="post" action="/connections/{{ c.id }}/tools">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="listed" value="{{ tools | map(attribute='name') | join(',') }}">
+    <table>
+      <thead><tr><th>On</th><th>Tool</th><th>Description</th></tr></thead>
+      <tbody>
+      {% for t in tools %}
+        <tr class="{{ t.state }}">
+          <td>{% if t.state == "forbidden" %}<span class="pill error" title="never served (catalog)">blocked</span>
+              {% else %}<input type="checkbox" name="tool_{{ t.name }}" aria-label="{{ t.name }}" {% if t.state == "on" %}checked{% endif %}>{% endif %}</td>
+          <td><code>{{ t.name }}</code></td>
+          <td class="muted">{{ t.description[:160] }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <button>Save</button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if owner %}
+<section class="card danger">
+  <h2>Delete</h2>
+  <form method="post" action="/connections/{{ c.id }}/delete" class="row">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Type <code>{{ c.name }}</code> to confirm <input name="confirm" autocomplete="off"></label>
+    <button class="danger">Delete connection and its secrets</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

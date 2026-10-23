@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Connect with Google · Tools Gateway{% endblock %}
+{% block content %}
+<p><a href="/connections/{{ c.id }}">← {{ c.label }}</a></p>
+<section class="card narrow">
+  <h1>Connect {{ c.label }} with Google</h1>
+  <ol class="steps">
+    <li><a class="button" href="{{ url }}" target="_blank" rel="noopener noreferrer">Open Google</a>
+      <p class="muted">Sign in as <strong>{{ c.settings.get("email", "the account") }}</strong> and allow every
+        requested access. Google may warn that the app is unverified: Advanced → continue.</p></li>
+    <li><p>Google then sends you to an address starting with <code>http://localhost/?</code> that does not
+      load. That is expected: copy the whole address from the address bar.</p></li>
+    <li>
+      <form method="post" action="/oauth/google/finish">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label>Paste the address here <input name="pasted" placeholder="http://localhost/?state=…&code=…" required autocomplete="off"></label>
+        <button>Connect</button>
+      </form>
+    </li>
+  </ol>
+  <p class="muted">This link works for 15 minutes.</p>
+</section>
+{% endblock %}

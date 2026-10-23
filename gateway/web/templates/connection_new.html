@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ entry.label }} · Tools Gateway{% endblock %}
+{% block content %}
+<p><a href="/connections/new">← Catalog</a></p>
+<section class="card narrow">
+  <h1>{{ entry.label }}</h1>
+  {% if entry.description %}<p class="muted">{{ entry.description }}</p>{% endif %}
+  {% if entry.help %}<p>{{ entry.help }}</p>{% endif %}
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Name <input name="name" value="{{ values.name }}" pattern="[a-z][a-z0-9\-]{0,31}" required>
+      <small class="muted">{% if entry.kind == "native" %}How the agent names this account (the <code>account</code> argument).{% else %}The path: /mcp/{{ me.name }}/<em>name</em>.{% endif %}</small>
+    </label>
+    <label>Label <input name="label" value="{{ values.label }}"></label>
+    {% for f in entry.fields %}
+      {% set value = values.get(f.name) if not f.secret else none %}
+      {% set required_secret = true %}
+      {% include "_field.html" %}
+    {% endfor %}
+    {% if entry.oauth %}<p class="muted">After saving, connect the account with the button on the next page.</p>{% endif %}
+    <button>Add</button>
+  </form>
+</section>
+{% endblock %}
