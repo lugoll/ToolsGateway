@@ -37,6 +37,20 @@ def _logging(level: str) -> None:
     logging.getLogger("caldav").setLevel(max(logging.ERROR, logging.getLogger().level))
 
 
+class _AccessFilter(logging.Filter):
+    """uvicorn access lines without query strings (the OAuth callback carries
+    code and state there) and without the Docker healthcheck every 30 s."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple) and len(record.args) == 5:
+            client, method, path, version, status = record.args
+            path = str(path).split("?", 1)[0]
+            if path.startswith("/health/"):
+                return False
+            record.args = (client, method, path, version, status)
+        return True
+
+
 def _settings() -> Settings:
     try:
         return Settings.from_env()
@@ -63,8 +77,10 @@ def cmd_serve(args) -> int:
     app = create_app(_services(settings))
     # proxy_headers: Caddy in front sets X-Forwarded-For/-Proto; trust it on the
     # addresses in FORWARDED_ALLOW_IPS (uvicorn's default: 127.0.0.1).
-    uvicorn.run(app, host=settings.host, port=settings.port, log_level="warning", access_log=False,
-                proxy_headers=True)
+    # log_config=None: uvicorn's lines go through our root handler and format.
+    logging.getLogger("uvicorn.access").addFilter(_AccessFilter())
+    uvicorn.run(app, host=settings.host, port=settings.port, log_config=None,
+                log_level=settings.log_level.lower(), proxy_headers=True)
     return 0
 
 
