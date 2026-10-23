@@ -1,0 +1,52 @@
+# Security scans (scripts/scan.sh, reproduce locally with the same command):
+# code and dependencies on every push and PR; daily also the latest published
+# image, since new CVEs turn up without any change here. A failing scheduled
+# run is mailed by GitHub to whoever last changed the schedule.
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  code:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: "0.12.21"
+      - run: scripts/scan.sh code
+
+  deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - run: scripts/scan.sh deps
+
+  release-image:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: scan the latest release
+        run: |
+          tag=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null) || { echo "no release yet"; exit 0; }
+          scripts/scan.sh image "ghcr.io/${{ github.repository_owner }}/tools-gateway:${tag#v}"

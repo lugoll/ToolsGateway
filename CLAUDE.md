@@ -18,7 +18,10 @@ streamable HTTP. Python only, no child processes. Full reference: `README.md`.
 - `deploy/`: example compose file + Caddyfile for the Pi (`tools.pi.home`)
 - `tests/`: `uv run pytest`; IMAP tests need GreenMail (README, "Development");
   CalDAV tests run against an in-process Radicale
-- `.github/workflows/ci.yml`: tests; a tag `vX.Y.Z` publishes `ghcr.io/lugoll/tools-gateway`
+- `.github/workflows/ci.yml`: tests; a new `version` in `pyproject.toml` on main publishes
+  `ghcr.io/lugoll/tools-gateway:X.Y.Z` and tags the commit `vX.Y.Z`
+- `scripts/scan.sh`: Semgrep (`.semgrep/`: project rules) + Trivy (`trivy.yaml`), same locally and in
+  `.github/workflows/security.yml` (daily, incl. the released image); a release is scanned before it is pushed
 
 ## Rules
 

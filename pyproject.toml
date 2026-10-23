@@ -1,6 +1,6 @@
 [project]
 name = "tools-gateway"
-version = "0.3.0"
+version = "0.3.1"
 description = "Multi-user MCP gateway: proxies remote MCP servers and hosts native connectors (mail, calendar), configured through a small web UI"
 requires-python = ">=3.12"
 license = "Apache-2.0"

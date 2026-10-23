@@ -1,0 +1,12 @@
+# Trivy settings for scripts/scan.sh (deps and image); accepted findings go into .trivyignore.
+# Fails on HIGH and CRITICAL findings that have a fix: those without one can't be acted on yet.
+severity: [HIGH, CRITICAL]
+exit-code: 1
+vulnerability:
+  ignore-unfixed: true
+scan:
+  # Local state that is not part of the repository (and holds real secrets locally).
+  skip-dirs: [.venv, .git, .pytest_cache, data, deploy]
+  skip-files: [.env, .env.local]
+# Findings only, no per-file summary table.
+table-mode: [detailed]

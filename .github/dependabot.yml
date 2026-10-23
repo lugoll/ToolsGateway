@@ -1,0 +1,23 @@
+# Weekly update PRs for the Python lock file, the Dockerfile base images and the
+# workflow actions (SHA pins included); minor and patch updates come as one PR each.
+# New versions wait 7 days (cooldown) unless they fix a vulnerability.
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule: {interval: weekly}
+    cooldown: {default-days: 7}
+    groups:
+      python: {update-types: [minor, patch]}
+  - package-ecosystem: docker
+    directory: /
+    schedule: {interval: weekly}
+    cooldown: {default-days: 7}
+    groups:
+      images: {update-types: [minor, patch]}
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}
+    cooldown: {default-days: 7}
+    groups:
+      actions: {update-types: [minor, patch]}

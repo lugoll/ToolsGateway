@@ -20,7 +20,8 @@ async def login(request: Request):
         if w.session(request):
             return Web.redirect("/")
         return w.render(request, "login.html", next=_safe_next(request.query_params.get("next")))
-    data = await request.form()                 # no session yet: WebSecurity's origin check guards it
+    # No session yet, so no CSRF token: WebSecurity's origin check guards the login form.
+    data = await request.form()  # nosemgrep: post-without-csrf
     name = str(data.get("name", "")).strip().lower()
     password = str(data.get("password", ""))
     target = _safe_next(str(data.get("next", "")))

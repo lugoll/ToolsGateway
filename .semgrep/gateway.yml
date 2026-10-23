@@ -1,0 +1,78 @@
+# Run by scripts/scan.sh code (next to the Semgrep registry packs); every finding fails the scan.
+# A justified exception: `# nosemgrep: <rule id>` on the line, with the reason next to it.
+rules:
+  - id: no-sending-mail
+    message: >-
+      Least privilege: the gateway never sends or forwards mail (no SMTP, no Gmail send).
+      Tools may read, label, move and draft.
+    severity: ERROR
+    languages: [python]
+    pattern-either:
+      - pattern: import smtplib
+      - pattern: import aiosmtplib
+      - pattern: from smtplib import $X
+      - pattern: from aiosmtplib import $X
+
+  - id: no-permanent-mail-delete
+    message: >-
+      Least privilege: mail is never deleted permanently. Gmail: trash/untrash and labels only
+      (no DELETE, batchDelete or send); IMAP: expunge only the moved UID (uid_expunge).
+    severity: ERROR
+    languages: [python]
+    paths:
+      include: ["/gateway/connectors/mail/"]
+    pattern-either:
+      - pattern: $C.expunge(...)
+      - pattern: $C.delete_messages(...)
+      - pattern: $C._call("DELETE", ...)
+      - pattern-regex: /(send|batchDelete|batchModify)\b
+
+  - id: post-without-csrf
+    message: >-
+      Read posted forms through web.common.form (CSRF check), not request.form().
+    severity: ERROR
+    languages: [python]
+    paths:
+      include: ["/gateway/web/"]
+      exclude: ["/gateway/web/common.py"]
+    pattern: await $REQ.form()
+
+  - id: environment-outside-settings
+    message: >-
+      The environment (and with it the master key) is read once, in gateway/settings.py;
+      everything else gets its values from Settings.
+    severity: ERROR
+    languages: [python]
+    paths:
+      include: ["/gateway/"]
+      exclude: ["/gateway/settings.py"]
+    pattern-either:
+      - pattern: os.environ
+      - pattern: os.getenv(...)
+
+  - id: secret-in-log-or-audit
+    message: >-
+      A value that looks like a secret goes into a log line or the audit log.
+      Secrets live only in the encrypted store (storage/secrets.py).
+    severity: ERROR
+    languages: [python]
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern: $LOG.$LEVEL(..., $ARG, ...)
+              - metavariable-regex:
+                  metavariable: $LEVEL
+                  regex: ^(debug|info|warning|error|exception|critical)$
+          - pattern: $CTX.record_change(..., $ARG, ...)
+      - metavariable-regex:
+          metavariable: $ARG
+          regex: (?i)^[\w.]*(secret|password|passwd|master_key|api_key|access_token|refresh_token|bearer)\w*$
+
+  - id: template-without-escaping
+    message: >-
+      Template output must stay autoescaped: no |safe filter, no {% autoescape false %}.
+    severity: ERROR
+    languages: [generic]
+    paths:
+      include: ["/gateway/web/templates/"]
+    pattern-regex: \|\s*safe\b|autoescape\s+false

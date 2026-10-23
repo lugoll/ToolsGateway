@@ -3,3 +3,7 @@ __pycache__/
 .pytest_cache/
 tests/
 *.pyc
+.env
+.env.local
+data/
+.git/

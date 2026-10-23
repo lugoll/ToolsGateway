@@ -1,17 +1,17 @@
-# Tests the gateway on every push and PR and publishes the image on a tag
-# `vX.Y.Z` as ghcr.io/<owner>/tools-gateway:X.Y.Z
-# (linux/amd64 for the laptop, linux/arm64 for the Pi).
+# Tests the gateway on every push and PR. On main, a version in pyproject.toml
+# that has no tag `vX.Y.Z` yet is released: the image is built, scanned with
+# Trivy, pushed as ghcr.io/<owner>/tools-gateway:X.Y.Z (linux/amd64 for the
+# laptop, linux/arm64 for the Pi), and the commit is tagged. A released version
+# is never rebuilt. Actions are pinned by commit SHA (Dependabot keeps them current).
 name: tools-gateway
 
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   test:
@@ -23,8 +23,8 @@ jobs:
           GREENMAIL_OPTS: "-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.auth.disabled"
         ports: ["3025:3025", "3143:3143"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
           version: "0.12.21"
       - run: uv sync --locked
@@ -35,25 +35,64 @@ jobs:
           GATEWAY_TEST_IMAP: 127.0.0.1:3143
           GATEWAY_TEST_SMTP: 127.0.0.1:3025
 
-  image:
-    if: startsWith(github.ref, 'refs/tags/v')
+  version:
+    if: github.event_name == 'push'
     needs: test
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      new: ${{ steps.check.outputs.new }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - id: check
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
+            echo "v$version is released already: nothing to publish"
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "v$version is new: releasing"
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    if: needs.version.outputs.new == 'true'
+    needs: version
+    runs-on: ubuntu-latest
+    concurrency: release
+    permissions:
+      contents: write     # the release tag
+      packages: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - id: version
-        run: echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@v6
+      # Scan first: nothing is pushed while the image has a blocking finding.
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: tools-gateway:scan
+          cache-to: type=gha,mode=max
+      - run: scripts/scan.sh image tools-gateway:scan
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/tools-gateway:${{ steps.version.outputs.tag }}
+          cache-from: type=gha
+          tags: ghcr.io/${{ github.repository_owner }}/tools-gateway:${{ env.VERSION }}
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+      - name: tag the release
+        run: |
+          git tag "v$VERSION" "$GITHUB_SHA"
+          git push origin "v$VERSION"

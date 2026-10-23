@@ -230,6 +230,7 @@ gateway/
   web/                               UI routes, templates, static CSS, HTTP hardening
 catalog/                             what users can connect (format: catalog/README.md)
 deploy/                              example compose file and Caddyfile
+scripts/scan.sh                      security scans (Semgrep rules in .semgrep/, Trivy settings in trivy.yaml)
 tests/
 ```
 
@@ -263,5 +264,36 @@ GATEWAY_MASTER_KEY=$(uv run gateway keygen) GATEWAY_ADMIN_USER=admin GATEWAY_ADM
 
 Then open http://localhost:3050.
 
-Releases: push a tag `vX.Y.Z`. CI runs the tests, builds `linux/amd64` and
-`linux/arm64`, and pushes `ghcr.io/lugoll/tools-gateway:X.Y.Z`.
+Releases: bump `version` in `pyproject.toml` and push to `main`. When that
+version has no tag `vX.Y.Z` yet, CI runs the tests, builds `linux/amd64` and
+`linux/arm64`, scans the image (below), pushes `ghcr.io/lugoll/tools-gateway:X.Y.Z`
+and tags the commit `vX.Y.Z`. A released version is never rebuilt; pushes
+without a version bump only run the tests and scans.
+
+### Security scans
+
+`scripts/scan.sh` runs the same scans locally and in CI (needs `uv` and `docker`;
+Semgrep and Trivy versions are pinned in the script):
+
+```bash
+scripts/scan.sh code                 # Semgrep: project rules (.semgrep/) + python, OWASP, GitHub Actions packs
+scripts/scan.sh deps                 # Trivy: uv.lock vulnerabilities, secrets, Dockerfile misconfig
+scripts/scan.sh image [REF]          # Trivy: the image (default: builds the Dockerfile; or e.g. ghcr.io/lugoll/tools-gateway:0.3.0)
+scripts/scan.sh                      # all three
+```
+
+A scan fails on any Semgrep finding and on HIGH/CRITICAL Trivy findings that
+have a fix (settings: `trivy.yaml`). `.semgrep/gateway.yml` turns the rules of
+this project into checks: no mail sending or permanent deletes, forms only
+through the CSRF check, the environment read only in `settings.py`, no secrets
+in logs or the audit log, autoescaped templates.
+
+- **Fix:** usually `uv lock --upgrade-package <name>` or a rebuild of the image
+  (it installs Debian security updates).
+- **Accept:** an ID in `.trivyignore` with a reason and an `exp:` date, or
+  `# nosemgrep: <rule id>` on the line, with the reason next to it.
+
+`.github/workflows/security.yml` runs code and deps on every push and PR, and
+daily also scans the latest released image, since new CVEs show up without any
+change here. Dependabot (`.github/dependabot.yml`) opens weekly update PRs for
+`uv.lock`, the base images and the (SHA-pinned) actions.

@@ -1,0 +1,2 @@
+# Accepted Trivy findings, one ID per line, each with the reason and an expiry:
+#   CVE-2026-12345 exp:2026-12-31   # not reachable: <why>
