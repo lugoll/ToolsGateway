@@ -41,7 +41,8 @@ scan_image() {
   local ref=${1:-}
   if [[ -z $ref ]]; then
     ref=tools-gateway:scan
-    docker build --pull -t "$ref" .
+    # No cache: a stale `apt-get upgrade` layer would report packages already fixed upstream.
+    docker build --pull --no-cache -t "$ref" .
   elif ! docker image inspect "$ref" >/dev/null 2>&1; then
     docker pull "$ref"
   fi
