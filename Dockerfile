@@ -1,8 +1,8 @@
 # tools-gateway image: Python only. uv is used to build the venv and is not in the final image.
 # Built and pushed by .github/workflows/ci.yml (linux/amd64, linux/arm64).
-FROM ghcr.io/astral-sh/uv:0.13.5 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.6 AS uv
 
-FROM python:3.14.7-slim-bookworm AS build
+FROM python:3.15.0-slim-bookworm AS build
 COPY --from=uv /uv /usr/local/bin/
 WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
@@ -11,7 +11,7 @@ RUN uv sync --locked --no-dev --no-install-project
 COPY gateway ./gateway
 RUN uv sync --locked --no-dev --no-editable
 
-FROM python:3.14.7-slim-bookworm
+FROM python:3.15.0-slim-bookworm
 # Debian security fixes that are newer than the base image. pip is not needed at runtime (the venv
 # comes from the build stage) and its vendored packages (certifi, urllib3, ...) lag behind: removed.
 RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/* \
