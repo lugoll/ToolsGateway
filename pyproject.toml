@@ -5,10 +5,10 @@ description = "Multi-user MCP gateway: proxies remote MCP servers and hosts nati
 requires-python = ">=3.12"
 license = "Apache-2.0"
 dependencies = [
-    "fastmcp==4.1.0",
+    "fastmcp==4.1.3",
     "uvicorn==0.54.0",
     "imapclient==4.1.0",
-    "inscriptis==2.7.5",
+    "inscriptis==2.7.6",
     "google-auth==2.62.0",
     "requests>=2.32",
     "pyyaml>=6.0",
