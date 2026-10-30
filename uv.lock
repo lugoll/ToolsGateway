@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -178,9 +178,10 @@ wheels = [
 
 [[package]]
 name = "caldav"
-version = "3.5.0"
+version = "3.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "calendaring-config" },
     { name = "dnspython" },
     { name = "icalendar" },
     { name = "icalendar-searcher" },
@@ -190,9 +191,21 @@ dependencies = [
     { name = "pyyaml" },
     { name = "recurring-ical-events" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/96/b0/d5064b07ee0d4316e6b0240a0e7e388cdfb306aeeea4ea898f9a768e57b1/caldav-3.5.0.tar.gz", hash = "sha256:9ce1a15ec48a3a6bad73c9bdd44073f01b5a499bd43fc2710b5181a291a75f61", size = 752507, upload-time = "2026-10-15T09:59:35.931Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/35/ee/e2d82d0ddc9c5b0efad8dbb3c9f27bd392fd9f2261c93772e7a7bfaa30fa/caldav-3.6.0.tar.gz", hash = "sha256:f74deecf1b7f1a56ffc20a739f28d2c02e7ddbc40bb59bf9f65a3af58e8aef1d", size = 765150, upload-time = "2026-10-22T19:58:10.881Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d2/15/069f8c104df9b82113e32950edc6e2770b49a78ffdd04fe2c6522edcd7e5/caldav-3.5.0-py3-none-any.whl", hash = "sha256:413c7f81d7c4b13db98ef01f4bf29660de53f526af265b583ff6a59628432e52", size = 251997, upload-time = "2026-10-15T09:59:34.345Z" },
+    { url = "https://files.pythonhosted.org/packages/6c/09/2a433c98919635dbd793ad74fe7921c2595624a269b2948a62348aa6342a/caldav-3.6.0-py3-none-any.whl", hash = "sha256:a16b433229c66ec4241acc67ca3f3774b8d93f1834c9bb5062d768dedbec6494", size = 259213, upload-time = "2026-10-22T19:58:09.173Z" },
+]
+
+[[package]]
+name = "calendaring-config"
+version = "0.5.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7c/ce/bd49e6a64ade7fa09d872eea80601281b1b4167b737ceb0de2b16d29b329/calendaring_config-0.5.0.tar.gz", hash = "sha256:ed68ae96a5d9790cdf0ea6a933ddafd617523759a8a3fd273c63a4f3c3dcc41c", size = 37968, upload-time = "2026-10-22T14:44:50.337Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5f/17/3e4e04e3a344b2260139e64f53d34e95163e02b128b6066753540d5df524/calendaring_config-0.5.0-py3-none-any.whl", hash = "sha256:c5e1f6ffaf428a59b0e1373d951eb8e7fd9f49924912e65548cc2803e73a8646", size = 28571, upload-time = "2026-10-22T14:44:49.195Z" },
 ]
 
 [[package]]
@@ -570,19 +583,19 @@ wheels = [
 
 [[package]]
 name = "fastmcp"
-version = "4.1.0"
+version = "4.1.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastmcp-slim", extra = ["client", "server"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c3/c4/fe4e24af2cb03f4701f45634873d87557c2b5d283d287412345345ad0ede/fastmcp-4.1.0.tar.gz", hash = "sha256:7a8bf4e58cc6c2f3a8552b5a7a17ba1e4682b6fd4cafb7f461920a66dbd2499f", size = 42686511, upload-time = "2026-10-08T22:57:05.652Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ea/f4/79169f9a2419e1f541b3b39b1bda1c57569b4c7c1ac4b606750c81471ad1/fastmcp-4.1.3.tar.gz", hash = "sha256:a1f79e9db929a1603c75331df603f74530fc236aa711e0ee2e185821c6d9888d", size = 42755717, upload-time = "2026-10-20T22:32:28.005Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5c/81/77610de5d79187455ec4a4eafdc17942365f1bc4e5850633e50159e9afdc/fastmcp-4.1.0-py3-none-any.whl", hash = "sha256:cf19fd603315b48ef1829c8579431e77793feafdcbed51f0dc5607af10a24e9b", size = 8154, upload-time = "2026-10-08T22:57:02.531Z" },
+    { url = "https://files.pythonhosted.org/packages/97/7f/27c501d98b5681ca4f6c21a7d741b3e732e962c5e4c3b4db6dd1ffdf4fd8/fastmcp-4.1.3-py3-none-any.whl", hash = "sha256:b983d8acc44ab1143e0c86fd6da843f25043ee0aeb64ab983b36c527bd1d33e9", size = 8153, upload-time = "2026-10-20T22:32:22.881Z" },
 ]
 
 [[package]]
 name = "fastmcp-slim"
-version = "4.1.0"
+version = "4.1.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "mcp-types" },
@@ -593,9 +606,9 @@ dependencies = [
     { name = "rich" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b8/88/85aafec43ec9940a360d75f2d8e9517eda01ac38b8b1610b0e9e125d61d3/fastmcp_slim-4.1.0.tar.gz", hash = "sha256:390b2b430195e0cdd0327aff80fe5dceb862b2421baf71de6d4eec92f80f99f8", size = 734647, upload-time = "2026-10-08T22:56:40.642Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/81/86/01705c74106297c021e5f8a22ed051adb43061cc779cf543dc05a4d47aba/fastmcp_slim-4.1.3.tar.gz", hash = "sha256:d95277db0979e4cbfa84528cf9016ae079494b41ed8e88cc909fee8233db6035", size = 749467, upload-time = "2026-10-20T22:30:58.047Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/54/6a/d61e1541f4c65872146a576c1379f6f32013fd8c636bcaf0f8e70a04e533/fastmcp_slim-4.1.0-py3-none-any.whl", hash = "sha256:6edb48a78e508ef5ac691bf2a68f3e5000403773655d859eceea1068b894df4a", size = 911585, upload-time = "2026-10-08T22:56:39.136Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/ff/a7feaeb130a2003700789ce32e933b4c2ae00fc7c264642e57ab12e4684f/fastmcp_slim-4.1.3-py3-none-any.whl", hash = "sha256:81af8699331c33d438caf85b6947f36df6e2f04118e6f318ca00374fd9afea9a", size = 931046, upload-time = "2026-10-20T22:30:56.182Z" },
 ]
 
 [package.optional-dependencies]
@@ -612,6 +625,7 @@ client = [
 server = [
     { name = "authlib" },
     { name = "beartype", marker = "python_full_version >= '3.15'" },
+    { name = "certifi" },
     { name = "cyclopts" },
     { name = "exceptiongroup" },
     { name = "griffelib" },
@@ -788,15 +802,15 @@ wheels = [
 
 [[package]]
 name = "inscriptis"
-version = "2.7.5"
+version = "2.7.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "lxml" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/28/e1/6a22a16abbe9111c119f95265f148c3eaee8a0065858e14084f1660ec53b/inscriptis-2.7.5.tar.gz", hash = "sha256:3ce15f75ed7ae3ecf45c0c39458774011483c382686a61d04e49949104d44092", size = 1098396, upload-time = "2026-09-29T17:40:33.647Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c0/ba/0c1c15d3975fb4fdc9ccb2a857086bd29c84bb2f3a63a4f37ca0941920e4/inscriptis-2.7.6.tar.gz", hash = "sha256:b8fe23c5ae4db33c9d1c5e1b7d000dbfa1decbea7b605ac87e0f5d8f8abc3ce6", size = 997650, upload-time = "2026-10-23T19:33:13.59Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b4/be/7c0ce8f475269cef0e43e48ea1e103a3afe948277cf2fd3bc4a00470a424/inscriptis-2.7.5-py3-none-any.whl", hash = "sha256:5d6fcf405f6d9efe29b55c44b062573d88af3dfddde48c124b778ab4c7133f40", size = 47734, upload-time = "2026-09-29T17:40:31.583Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/57/66719bc368a5893d5144d2843b1bac7f16b1373bf5bdd15ddeaf0a9808ea/inscriptis-2.7.6-py3-none-any.whl", hash = "sha256:bd0e86bc48c1e42b9e6e0000c47a9232214b6d89b124168ac3ec2abca23bbf5c", size = 48006, upload-time = "2026-10-23T19:33:11.433Z" },
 ]
 
 [[package]]
@@ -2089,10 +2103,10 @@ requires-dist = [
     { name = "argon2-cffi", specifier = ">=23.1" },
     { name = "caldav", specifier = ">=1.4" },
     { name = "cryptography", specifier = ">=44" },
-    { name = "fastmcp", specifier = "==4.1.0" },
+    { name = "fastmcp", specifier = "==4.1.3" },
     { name = "google-auth", specifier = "==2.62.0" },
     { name = "imapclient", specifier = "==4.1.0" },
-    { name = "inscriptis", specifier = "==2.7.5" },
+    { name = "inscriptis", specifier = "==2.7.6" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "niquests", specifier = ">=3.21" },
     { name = "python-multipart", specifier = ">=0.0.20" },
