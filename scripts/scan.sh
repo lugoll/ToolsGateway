@@ -12,7 +12,7 @@
 set -euo pipefail
 
 SEMGREP_VERSION=1.182.1
-TRIVY_VERSION=0.76.1
+TRIVY_VERSION=0.76.2
 
 cd "$(dirname "$0")/.."
 TRIVY_CACHE=${TRIVY_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/trivy}

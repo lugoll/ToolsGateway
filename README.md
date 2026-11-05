@@ -21,7 +21,7 @@ Two kinds of connection:
   supported, and each tool can be switched on or off.
 
 Python only: the gateway starts no processes and there is no Node in the
-image. Built on [FastMCP](https://gofastmcp.com) (`fastmcp==4.0.10`) and
+image. Built on [FastMCP](https://gofastmcp.com) (`fastmcp==4.1.6`) and
 Starlette. Templates of what can be connected live in the [catalog](catalog/README.md),
 and state lives in one SQLite file.
 
