@@ -8,8 +8,8 @@ dependencies = [
     "fastmcp==4.1.6",
     "uvicorn==0.54.0",
     "imapclient==4.1.0",
-    "inscriptis==2.7.5",
-    "google-auth==2.62.0",
+    "inscriptis==2.7.6",
+    "google-auth==2.62.1",
     "requests>=2.32",
     "pyyaml>=6.0",
     "cryptography>=44",
@@ -24,7 +24,7 @@ dependencies = [
 gateway = "gateway.cli:main"
 
 [dependency-groups]
-dev = ["pytest==9.1.1", "pytest-asyncio>=1.0", "httpx>=0.28", "radicale>=3.2"]
+dev = ["pytest==9.2.0", "pytest-asyncio>=1.0", "httpx>=0.28", "radicale>=3.2"]
 
 [build-system]
 requires = ["hatchling"]
